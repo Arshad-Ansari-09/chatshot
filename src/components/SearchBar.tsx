@@ -99,15 +99,21 @@ const SearchBar = () => {
       return;
     }
 
-    // Add both participants
-    const { error: participantError } = await supabase
+    // Add both participants (do it in two steps so RLS can validate membership)
+    const { error: selfParticipantError } = await supabase
       .from('conversation_participants')
-      .insert([
-        { conversation_id: convoId, user_id: user.id },
-        { conversation_id: convoId, user_id: profile.id },
-      ]);
+      .insert({ conversation_id: convoId, user_id: user.id });
 
-    if (participantError) {
+    if (selfParticipantError) {
+      toast.error('Failed to add participants');
+      return;
+    }
+
+    const { error: otherParticipantError } = await supabase
+      .from('conversation_participants')
+      .insert({ conversation_id: convoId, user_id: profile.id });
+
+    if (otherParticipantError) {
       toast.error('Failed to add participants');
       return;
     }
