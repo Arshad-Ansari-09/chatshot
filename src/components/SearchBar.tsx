@@ -87,14 +87,14 @@ const SearchBar = () => {
       return;
     }
 
-    // Create new conversation
-    const { data: newConvo, error: convoError } = await supabase
-      .from('conversations')
-      .insert({ is_group: false })
-      .select()
-      .single();
+    // Create new conversation (avoid return=representation; RLS blocks selecting until participants exist)
+    const convoId = crypto.randomUUID();
 
-    if (convoError || !newConvo) {
+    const { error: convoError } = await supabase
+      .from('conversations')
+      .insert({ id: convoId, is_group: false });
+
+    if (convoError) {
       toast.error('Failed to create conversation');
       return;
     }
@@ -103,8 +103,8 @@ const SearchBar = () => {
     const { error: participantError } = await supabase
       .from('conversation_participants')
       .insert([
-        { conversation_id: newConvo.id, user_id: user.id },
-        { conversation_id: newConvo.id, user_id: profile.id },
+        { conversation_id: convoId, user_id: user.id },
+        { conversation_id: convoId, user_id: profile.id },
       ]);
 
     if (participantError) {
@@ -112,7 +112,7 @@ const SearchBar = () => {
       return;
     }
 
-    navigate(`/chat/${newConvo.id}`);
+    navigate(`/chat/${convoId}`);
     setQuery('');
     setShowResults(false);
   };
