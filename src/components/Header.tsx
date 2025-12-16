@@ -21,7 +21,7 @@ const Header = () => {
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
             <MessageCircle className="w-5 h-5 text-primary-foreground" />
           </div>
-          <h1 className="text-xl font-bold text-foreground">ChatWave</h1>
+          <h1 className="text-xl font-bold text-foreground">MyChat</h1>
         </div>
         
         <div className="flex items-center gap-2">

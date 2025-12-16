@@ -155,6 +155,7 @@ export type Database = {
           created_at: string | null
           expires_at: string | null
           id: string
+          media_type: string | null
           media_url: string
           user_id: string
         }
@@ -163,6 +164,7 @@ export type Database = {
           created_at?: string | null
           expires_at?: string | null
           id?: string
+          media_type?: string | null
           media_url: string
           user_id: string
         }
@@ -171,6 +173,7 @@ export type Database = {
           created_at?: string | null
           expires_at?: string | null
           id?: string
+          media_type?: string | null
           media_url?: string
           user_id?: string
         }
@@ -225,7 +228,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_conversation_member: {
+        Args: { _conversation_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
