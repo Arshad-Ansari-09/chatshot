@@ -5,9 +5,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, Globe } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { WORLD_CHAT_ID } from '@/lib/constants';
+import { renderMessageContent } from '@/lib/linkify';
 
 interface Message {
   id: string;
@@ -25,6 +27,13 @@ interface OtherUser {
   is_online: boolean;
 }
 
+interface Participant {
+  id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+}
+
 const Chat = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -32,9 +41,13 @@ const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
+  const [participants, setParticipants] = useState<Record<string, Participant>>({});
+  const [participantCount, setParticipantCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const isWorldChat = id === WORLD_CHAT_ID;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -68,6 +81,34 @@ const Chat = () => {
   const fetchOtherUser = async () => {
     if (!id || !user) return;
 
+    if (isWorldChat) {
+      // For World Chat, fetch all participants for avatars/names
+      const { data: allParticipants, count } = await supabase
+        .from('conversation_participants')
+        .select(`
+          profiles!conversation_participants_user_id_fkey (
+            id,
+            username,
+            full_name,
+            avatar_url
+          )
+        `, { count: 'exact' })
+        .eq('conversation_id', id);
+
+      if (allParticipants) {
+        const participantMap: Record<string, Participant> = {};
+        allParticipants.forEach((p: any) => {
+          if (p.profiles) {
+            participantMap[p.profiles.id] = p.profiles;
+          }
+        });
+        setParticipants(participantMap);
+        setParticipantCount(count || 0);
+      }
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('conversation_participants')
       .select(`
@@ -81,7 +122,7 @@ const Chat = () => {
       `)
       .eq('conversation_id', id)
       .neq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (!error && data) {
       setOtherUser(data.profiles as any);
@@ -158,7 +199,11 @@ const Chat = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-lg border-b border-border">
+      <header className={`sticky top-0 z-50 backdrop-blur-lg border-b border-border ${
+        isWorldChat 
+          ? 'bg-gradient-to-r from-purple-500/10 to-blue-500/10' 
+          : 'bg-card/80'
+      }`}>
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-4">
           <Button
             variant="ghost"
@@ -171,22 +216,32 @@ const Chat = () => {
           
           <div className="flex items-center gap-3 flex-1">
             <div className="relative">
-              <Avatar className="w-10 h-10">
-                <AvatarImage src={otherUser?.avatar_url || undefined} />
-                <AvatarFallback className="bg-primary/10 text-primary">
-                  {otherUser?.full_name?.[0] || otherUser?.username?.[0] || '?'}
-                </AvatarFallback>
-              </Avatar>
-              {otherUser?.is_online && (
-                <span className="absolute bottom-0 right-0 w-3 h-3 bg-online rounded-full border-2 border-card" />
+              {isWorldChat ? (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-white" />
+                </div>
+              ) : (
+                <>
+                  <Avatar className="w-10 h-10">
+                    <AvatarImage src={otherUser?.avatar_url || undefined} />
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      {otherUser?.full_name?.[0] || otherUser?.username?.[0] || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  {otherUser?.is_online && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-online rounded-full border-2 border-card" />
+                  )}
+                </>
               )}
             </div>
             <div>
-              <p className="font-semibold text-foreground">
-                {otherUser?.full_name || otherUser?.username || 'Unknown'}
+              <p className={`font-semibold ${isWorldChat ? 'text-purple-400' : 'text-foreground'}`}>
+                {isWorldChat ? 'World Chat' : (otherUser?.full_name || otherUser?.username || 'Unknown')}
               </p>
               <p className="text-xs text-muted-foreground">
-                {otherUser?.is_online ? 'Online' : 'Offline'}
+                {isWorldChat 
+                  ? `${participantCount} members` 
+                  : (otherUser?.is_online ? 'Online' : 'Offline')}
               </p>
             </div>
           </div>
@@ -200,7 +255,9 @@ const Chat = () => {
             <div className="text-center py-12">
               <p className="text-muted-foreground">No messages yet</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Send a message to start the conversation!
+                {isWorldChat 
+                  ? 'Be the first to say hello to the world!'
+                  : 'Send a message to start the conversation!'}
               </p>
             </div>
           ) : (
@@ -209,6 +266,8 @@ const Chat = () => {
               const showDate = index === 0 || 
                 format(new Date(message.created_at), 'yyyy-MM-dd') !== 
                 format(new Date(messages[index - 1].created_at), 'yyyy-MM-dd');
+              
+              const sender = isWorldChat && !isMine ? participants[message.sender_id] : null;
 
               return (
                 <React.Fragment key={message.id}>
@@ -220,6 +279,15 @@ const Chat = () => {
                     </div>
                   )}
                   <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} animate-slide-up`}>
+                    {/* Avatar for other users in World Chat */}
+                    {isWorldChat && !isMine && (
+                      <Avatar className="w-8 h-8 mr-2 flex-shrink-0 mt-1">
+                        <AvatarImage src={sender?.avatar_url || undefined} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          {sender?.full_name?.[0] || sender?.username?.[0] || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
                     <div
                       className={`max-w-[80%] px-4 py-3 rounded-2xl ${
                         isMine
@@ -227,7 +295,13 @@ const Chat = () => {
                           : 'bg-message-received text-foreground rounded-bl-md'
                       }`}
                     >
-                      <p className="text-sm break-words">{message.content}</p>
+                      {/* Sender name for World Chat */}
+                      {isWorldChat && !isMine && sender && (
+                        <p className="text-xs font-semibold text-purple-400 mb-1">
+                          {sender.full_name || sender.username || 'Unknown'}
+                        </p>
+                      )}
+                      <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
                       <p className={`text-xs mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {format(new Date(message.created_at), 'h:mm a')}
                       </p>
