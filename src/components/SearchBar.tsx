@@ -3,9 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, X } from 'lucide-react';
+import { Search, X, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { WORLD_CHAT_ID } from '@/lib/constants';
 
 interface Profile {
   id: string;
@@ -21,6 +22,7 @@ const SearchBar = () => {
   const [results, setResults] = useState<Profile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [loadingUserId, setLoadingUserId] = useState<string | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,63 +66,90 @@ const SearchBar = () => {
   }, [query, user]);
 
   const startConversation = async (profile: Profile) => {
-    if (!user) return;
+    if (!user || loadingUserId) return;
 
-    // Check if conversation already exists
-    const { data: existingParticipants } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', user.id);
+    setLoadingUserId(profile.id);
 
-    const { data: otherParticipants } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', profile.id);
+    try {
+      // Check if a private conversation already exists (excluding World Chat)
+      const { data: existingParticipants } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', user.id)
+        .neq('conversation_id', WORLD_CHAT_ID);
 
-    const userConvos = new Set(existingParticipants?.map(p => p.conversation_id) || []);
-    const existingConvo = otherParticipants?.find(p => userConvos.has(p.conversation_id));
+      const { data: otherParticipants } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', profile.id)
+        .neq('conversation_id', WORLD_CHAT_ID);
 
-    if (existingConvo) {
-      navigate(`/chat/${existingConvo.conversation_id}`);
+      // Find conversation that exists in both sets (1:1 private chat)
+      const userConvos = new Set(existingParticipants?.map(p => p.conversation_id) || []);
+      const existingConvo = otherParticipants?.find(p => userConvos.has(p.conversation_id));
+
+      if (existingConvo) {
+        // Verify it's not a group chat
+        const { data: convoData } = await supabase
+          .from('conversations')
+          .select('is_group')
+          .eq('id', existingConvo.conversation_id)
+          .single();
+
+        if (convoData && !convoData.is_group) {
+          navigate(`/chat/${existingConvo.conversation_id}`);
+          setQuery('');
+          setShowResults(false);
+          setLoadingUserId(null);
+          return;
+        }
+      }
+
+      // Create new private conversation
+      const convoId = crypto.randomUUID();
+
+      const { error: convoError } = await supabase
+        .from('conversations')
+        .insert({ id: convoId, is_group: false });
+
+      if (convoError) {
+        toast.error('Failed to create conversation');
+        setLoadingUserId(null);
+        return;
+      }
+
+      // Add current user as participant first
+      const { error: selfParticipantError } = await supabase
+        .from('conversation_participants')
+        .insert({ conversation_id: convoId, user_id: user.id });
+
+      if (selfParticipantError) {
+        toast.error('Failed to add participants');
+        setLoadingUserId(null);
+        return;
+      }
+
+      // Add other user as participant
+      const { error: otherParticipantError } = await supabase
+        .from('conversation_participants')
+        .insert({ conversation_id: convoId, user_id: profile.id });
+
+      if (otherParticipantError) {
+        toast.error('Failed to add participants');
+        setLoadingUserId(null);
+        return;
+      }
+
+      // Navigate to the new private chat
+      navigate(`/chat/${convoId}`);
       setQuery('');
       setShowResults(false);
-      return;
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+      toast.error('Failed to start conversation');
+    } finally {
+      setLoadingUserId(null);
     }
-
-    // Create new conversation (avoid return=representation; RLS blocks selecting until participants exist)
-    const convoId = crypto.randomUUID();
-
-    const { error: convoError } = await supabase
-      .from('conversations')
-      .insert({ id: convoId, is_group: false });
-
-    if (convoError) {
-      toast.error('Failed to create conversation');
-      return;
-    }
-
-    // Add both participants (do it in two steps so RLS can validate membership)
-    const { error: selfParticipantError } = await supabase
-      .from('conversation_participants')
-      .insert({ conversation_id: convoId, user_id: user.id });
-
-    if (selfParticipantError) {
-      toast.error('Failed to add participants');
-      return;
-    }
-
-    const { error: otherParticipantError } = await supabase
-      .from('conversation_participants')
-      .insert({ conversation_id: convoId, user_id: profile.id });
-
-    if (otherParticipantError) {
-      toast.error('Failed to add participants');
-      return;
-    }
-
-    navigate(`/chat/${convoId}`);
-    setQuery('');
-    setShowResults(false);
   };
 
   return (
@@ -163,7 +192,8 @@ const SearchBar = () => {
                 <button
                   key={profile.id}
                   onClick={() => startConversation(profile)}
-                  className="w-full flex items-center gap-3 p-4 hover:bg-accent transition-colors"
+                  disabled={loadingUserId !== null}
+                  className="w-full flex items-center gap-3 p-4 hover:bg-accent transition-colors disabled:opacity-50"
                 >
                   <Avatar className="w-12 h-12">
                     <AvatarImage src={profile.avatar_url || undefined} />
@@ -171,7 +201,7 @@ const SearchBar = () => {
                       {profile.full_name?.[0] || profile.username?.[0] || '?'}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="text-left">
+                  <div className="text-left flex-1">
                     <p className="font-medium text-foreground">
                       {profile.full_name || 'Unknown'}
                     </p>
@@ -179,6 +209,9 @@ const SearchBar = () => {
                       @{profile.username || 'user'}
                     </p>
                   </div>
+                  {loadingUserId === profile.id && (
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  )}
                 </button>
               ))}
             </div>
