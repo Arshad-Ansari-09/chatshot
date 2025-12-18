@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Send, Globe } from 'lucide-react';
+import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Download, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { WORLD_CHAT_ID } from '@/lib/constants';
@@ -17,6 +17,8 @@ interface Message {
   sender_id: string;
   created_at: string;
   is_read: boolean;
+  media_url?: string | null;
+  media_type?: string | null;
 }
 
 interface OtherUser {
@@ -45,9 +47,73 @@ const Chat = () => {
   const [participantCount, setParticipantCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isWorldChat = id === WORLD_CHAT_ID;
+
+  const getMediaType = (file: File): string => {
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('video/')) return 'video';
+    return 'document';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Max 10MB
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    setSelectedFile(file);
+    
+    // Create preview for images/videos
+    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+      setPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setPreviewUrl(null);
+    }
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    if (!user) return null;
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+    
+    const { error } = await supabase.storage
+      .from('chat-media')
+      .upload(fileName, file);
+
+    if (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload file');
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(fileName);
+
+    return urlData.publicUrl;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -162,16 +228,34 @@ const Chat = () => {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !id || sending) return;
+    if ((!newMessage.trim() && !selectedFile) || !user || !id || sending || uploading) return;
 
     setSending(true);
     const messageContent = newMessage.trim();
     setNewMessage('');
 
+    let mediaUrl: string | null = null;
+    let mediaType: string | null = null;
+
+    if (selectedFile) {
+      setUploading(true);
+      mediaUrl = await uploadFile(selectedFile);
+      mediaType = getMediaType(selectedFile);
+      setUploading(false);
+      clearSelectedFile();
+
+      if (!mediaUrl) {
+        setSending(false);
+        return;
+      }
+    }
+
     const { error } = await supabase.from('messages').insert({
       conversation_id: id,
       sender_id: user.id,
-      content: messageContent,
+      content: messageContent || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📎 File'),
+      media_url: mediaUrl,
+      media_type: mediaType,
     });
 
     if (error) {
@@ -186,6 +270,48 @@ const Chat = () => {
       .eq('id', id);
 
     setSending(false);
+  };
+
+  const renderMediaContent = (message: Message) => {
+    if (!message.media_url) return null;
+
+    if (message.media_type === 'image') {
+      return (
+        <img 
+          src={message.media_url} 
+          alt="Shared image" 
+          className="max-w-full rounded-lg mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+          style={{ maxHeight: '300px' }}
+          onClick={() => window.open(message.media_url!, '_blank')}
+        />
+      );
+    }
+
+    if (message.media_type === 'video') {
+      return (
+        <video 
+          src={message.media_url} 
+          controls 
+          className="max-w-full rounded-lg mb-2"
+          style={{ maxHeight: '300px' }}
+        />
+      );
+    }
+
+    // Document/other files
+    const fileName = message.media_url.split('/').pop() || 'File';
+    return (
+      <a 
+        href={message.media_url} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 p-2 bg-background/20 rounded-lg mb-2 hover:bg-background/30 transition-colors"
+      >
+        <FileText className="w-5 h-5" />
+        <span className="text-sm truncate flex-1">{fileName}</span>
+        <Download className="w-4 h-4" />
+      </a>
+    );
   };
 
   if (loading) {
@@ -301,7 +427,10 @@ const Chat = () => {
                           {sender.full_name || sender.username || 'Unknown'}
                         </p>
                       )}
-                      <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
+                      {renderMediaContent(message)}
+                      {(!message.media_url || message.content !== '📷 Photo' && message.content !== '🎥 Video' && message.content !== '📎 File') && (
+                        <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
+                      )}
                       <p className={`text-xs mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {format(new Date(message.created_at), 'h:mm a')}
                       </p>
@@ -317,7 +446,58 @@ const Chat = () => {
 
       {/* Message Input */}
       <div className="sticky bottom-0 bg-card/80 backdrop-blur-lg border-t border-border p-4">
+        {/* File Preview */}
+        {selectedFile && (
+          <div className="max-w-2xl mx-auto mb-3">
+            <div className="relative inline-block">
+              {previewUrl && selectedFile.type.startsWith('image/') ? (
+                <img 
+                  src={previewUrl} 
+                  alt="Preview" 
+                  className="max-h-32 rounded-lg"
+                />
+              ) : previewUrl && selectedFile.type.startsWith('video/') ? (
+                <video 
+                  src={previewUrl} 
+                  className="max-h-32 rounded-lg"
+                />
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
+                  <FileText className="w-5 h-5" />
+                  <span className="text-sm truncate max-w-[200px]">{selectedFile.name}</span>
+                </div>
+              )}
+              <Button
+                type="button"
+                size="icon"
+                variant="destructive"
+                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                onClick={clearSelectedFile}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        )}
+        
         <form onSubmit={sendMessage} className="max-w-2xl mx-auto flex gap-3">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+            className="hidden"
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="h-12 w-12 rounded-full hover:bg-accent"
+          >
+            <Paperclip className="w-5 h-5" />
+          </Button>
           <Input
             placeholder="Type a message..."
             value={newMessage}
@@ -327,10 +507,14 @@ const Chat = () => {
           <Button
             type="submit"
             size="icon"
-            disabled={!newMessage.trim() || sending}
+            disabled={(!newMessage.trim() && !selectedFile) || sending || uploading}
             className="h-12 w-12 rounded-full gradient-primary hover:opacity-90 transition-opacity"
           >
-            <Send className="w-5 h-5 text-primary-foreground" />
+            {uploading ? (
+              <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" />
+            ) : (
+              <Send className="w-5 h-5 text-primary-foreground" />
+            )}
           </Button>
         </form>
       </div>
