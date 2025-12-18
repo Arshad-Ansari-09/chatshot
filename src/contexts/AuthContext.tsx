@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { usePresence } from '@/hooks/usePresence';
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +26,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Track user presence
+  usePresence(user);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -72,6 +76,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    // Set offline before signing out
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ is_online: false, last_seen: new Date().toISOString() })
+        .eq('id', user.id);
+    }
     await supabase.auth.signOut();
   };
 
