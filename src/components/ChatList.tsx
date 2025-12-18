@@ -123,7 +123,8 @@ const ChatList = () => {
               username,
               full_name,
               avatar_url,
-              is_online
+              is_online,
+              last_seen
             )
           `)
           .eq('conversation_id', convo.id)

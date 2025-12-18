@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Download, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { WORLD_CHAT_ID } from '@/lib/constants';
 import { renderMessageContent } from '@/lib/linkify';
@@ -27,6 +27,7 @@ interface OtherUser {
   full_name: string | null;
   avatar_url: string | null;
   is_online: boolean;
+  last_seen: string | null;
 }
 
 interface Participant {
@@ -183,7 +184,8 @@ const Chat = () => {
           username,
           full_name,
           avatar_url,
-          is_online
+          is_online,
+          last_seen
         )
       `)
       .eq('conversation_id', id)
@@ -194,6 +196,18 @@ const Chat = () => {
       setOtherUser(data.profiles as any);
     }
     setLoading(false);
+  };
+
+  // Mark messages as read function
+  const markMessagesAsRead = async () => {
+    if (!id || !user) return;
+    
+    await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('conversation_id', id)
+      .neq('sender_id', user.id)
+      .eq('is_read', false);
   };
 
   useEffect(() => {
@@ -211,8 +225,14 @@ const Chat = () => {
           table: 'messages',
           filter: `conversation_id=eq.${id}`,
         },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+        async (payload) => {
+          const newMessage = payload.new as Message;
+          setMessages((prev) => [...prev, newMessage]);
+          
+          // If the new message is from someone else, mark it as read immediately
+          if (newMessage.sender_id !== user?.id) {
+            await markMessagesAsRead();
+          }
         }
       )
       .subscribe();
@@ -367,7 +387,11 @@ const Chat = () => {
               <p className="text-xs text-muted-foreground">
                 {isWorldChat 
                   ? `${participantCount} members` 
-                  : (otherUser?.is_online ? 'Online' : 'Offline')}
+                  : otherUser?.is_online 
+                    ? 'Online' 
+                    : otherUser?.last_seen 
+                      ? `Last seen ${formatDistanceToNow(new Date(otherUser.last_seen), { addSuffix: true })}`
+                      : 'Offline'}
               </p>
             </div>
           </div>
