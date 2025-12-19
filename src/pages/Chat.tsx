@@ -10,6 +10,8 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { WORLD_CHAT_ID } from '@/lib/constants';
 import { renderMessageContent } from '@/lib/linkify';
+import { compressImage } from '@/lib/imageCompression';
+import { Progress } from '@/components/ui/progress';
 
 interface Message {
   id: string;
@@ -37,6 +39,11 @@ interface Participant {
   avatar_url: string | null;
 }
 
+interface SelectedFileInfo {
+  file: File;
+  previewUrl: string | null;
+}
+
 const Chat = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -49,8 +56,8 @@ const Chat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFileInfo[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,32 +69,51 @@ const Chat = () => {
     return 'document';
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    // Max 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be less than 10MB');
+    // Validate total size and count
+    const MAX_FILES = 10;
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB per file
+
+    if (files.length > MAX_FILES) {
+      toast.error(`You can only select up to ${MAX_FILES} files at once`);
       return;
     }
 
-    setSelectedFile(file);
-    
-    // Create preview for images/videos
-    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-      setPreviewUrl(URL.createObjectURL(file));
-    } else {
-      setPreviewUrl(null);
+    const invalidFiles = files.filter(f => f.size > MAX_SIZE);
+    if (invalidFiles.length > 0) {
+      toast.error('Some files exceed the 10MB limit');
+      return;
     }
+
+    // Create previews for each file
+    const newFiles: SelectedFileInfo[] = files.map(file => ({
+      file,
+      previewUrl: file.type.startsWith('image/') || file.type.startsWith('video/')
+        ? URL.createObjectURL(file)
+        : null,
+    }));
+
+    setSelectedFiles(prev => [...prev, ...newFiles].slice(0, MAX_FILES));
   };
 
-  const clearSelectedFile = () => {
-    setSelectedFile(null);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles(prev => {
+      const file = prev[index];
+      if (file.previewUrl) {
+        URL.revokeObjectURL(file.previewUrl);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const clearSelectedFiles = () => {
+    selectedFiles.forEach(f => {
+      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+    });
+    setSelectedFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -248,39 +274,69 @@ const Chat = () => {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!newMessage.trim() && !selectedFile) || !user || !id || sending || uploading) return;
+    if ((!newMessage.trim() && selectedFiles.length === 0) || !user || !id || sending || uploading) return;
 
     setSending(true);
     const messageContent = newMessage.trim();
     setNewMessage('');
 
-    let mediaUrl: string | null = null;
-    let mediaType: string | null = null;
-
-    if (selectedFile) {
+    // If there are files to upload
+    if (selectedFiles.length > 0) {
       setUploading(true);
-      mediaUrl = await uploadFile(selectedFile);
-      mediaType = getMediaType(selectedFile);
-      setUploading(false);
-      clearSelectedFile();
+      setUploadProgress(0);
+      
+      const totalFiles = selectedFiles.length;
+      let uploadedCount = 0;
 
-      if (!mediaUrl) {
-        setSending(false);
-        return;
+      for (const fileInfo of selectedFiles) {
+        try {
+          // Compress image if applicable
+          let fileToUpload = fileInfo.file;
+          if (fileInfo.file.type.startsWith('image/')) {
+            fileToUpload = await compressImage(fileInfo.file);
+          }
+
+          const mediaUrl = await uploadFile(fileToUpload);
+          const mediaType = getMediaType(fileInfo.file);
+
+          if (mediaUrl) {
+            // Create a message for each file
+            const content = uploadedCount === 0 && messageContent 
+              ? messageContent 
+              : (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📎 File');
+            
+            await supabase.from('messages').insert({
+              conversation_id: id,
+              sender_id: user.id,
+              content,
+              media_url: mediaUrl,
+              media_type: mediaType,
+            });
+          }
+
+          uploadedCount++;
+          setUploadProgress(Math.round((uploadedCount / totalFiles) * 100));
+        } catch (error) {
+          console.error('Upload error:', error);
+          toast.error(`Failed to upload ${fileInfo.file.name}`);
+        }
       }
-    }
 
-    const { error } = await supabase.from('messages').insert({
-      conversation_id: id,
-      sender_id: user.id,
-      content: messageContent || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📎 File'),
-      media_url: mediaUrl,
-      media_type: mediaType,
-    });
+      clearSelectedFiles();
+      setUploading(false);
+      setUploadProgress(0);
+    } else if (messageContent) {
+      // Text-only message
+      const { error } = await supabase.from('messages').insert({
+        conversation_id: id,
+        sender_id: user.id,
+        content: messageContent,
+      });
 
-    if (error) {
-      toast.error('Failed to send message');
-      setNewMessage(messageContent);
+      if (error) {
+        toast.error('Failed to send message');
+        setNewMessage(messageContent);
+      }
     }
 
     // Update conversation timestamp
@@ -470,37 +526,64 @@ const Chat = () => {
 
       {/* Message Input */}
       <div className="sticky bottom-0 bg-card/80 backdrop-blur-lg border-t border-border p-4">
-        {/* File Preview */}
-        {selectedFile && (
+        {/* Upload Progress */}
+        {uploading && (
           <div className="max-w-2xl mx-auto mb-3">
-            <div className="relative inline-block">
-              {previewUrl && selectedFile.type.startsWith('image/') ? (
-                <img 
-                  src={previewUrl} 
-                  alt="Preview" 
-                  className="max-h-32 rounded-lg"
-                />
-              ) : previewUrl && selectedFile.type.startsWith('video/') ? (
-                <video 
-                  src={previewUrl} 
-                  className="max-h-32 rounded-lg"
-                />
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
-                  <FileText className="w-5 h-5" />
-                  <span className="text-sm truncate max-w-[200px]">{selectedFile.name}</span>
-                </div>
-              )}
-              <Button
-                type="button"
-                size="icon"
-                variant="destructive"
-                className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
-                onClick={clearSelectedFile}
-              >
-                <X className="w-3 h-3" />
-              </Button>
+            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground mb-1">
+                  Uploading {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}...
+                </p>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+              <span className="text-sm font-medium text-foreground">{uploadProgress}%</span>
             </div>
+          </div>
+        )}
+
+        {/* File Previews */}
+        {selectedFiles.length > 0 && !uploading && (
+          <div className="max-w-2xl mx-auto mb-3">
+            <div className="flex gap-2 flex-wrap">
+              {selectedFiles.map((fileInfo, index) => (
+                <div key={index} className="relative">
+                  {fileInfo.previewUrl && fileInfo.file.type.startsWith('image/') ? (
+                    <img 
+                      src={fileInfo.previewUrl} 
+                      alt="Preview" 
+                      className="h-20 w-20 object-cover rounded-lg"
+                    />
+                  ) : fileInfo.previewUrl && fileInfo.file.type.startsWith('video/') ? (
+                    <div className="h-20 w-20 bg-muted rounded-lg flex items-center justify-center">
+                      <video 
+                        src={fileInfo.previewUrl} 
+                        className="h-20 w-20 object-cover rounded-lg"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-20 w-20 flex flex-col items-center justify-center gap-1 bg-muted rounded-lg p-2">
+                      <FileText className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground truncate w-full text-center">
+                        {fileInfo.file.name.slice(0, 8)}...
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    className="absolute -top-2 -right-2 h-5 w-5 rounded-full"
+                    onClick={() => removeSelectedFile(index)}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
+            </p>
           </div>
         )}
         
@@ -510,6 +593,7 @@ const Chat = () => {
             ref={fileInputRef}
             onChange={handleFileSelect}
             accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+            multiple
             className="hidden"
           />
           <Button
@@ -531,7 +615,7 @@ const Chat = () => {
           <Button
             type="submit"
             size="icon"
-            disabled={(!newMessage.trim() && !selectedFile) || sending || uploading}
+            disabled={(!newMessage.trim() && selectedFiles.length === 0) || sending || uploading}
             className="h-12 w-12 rounded-full gradient-primary hover:opacity-90 transition-opacity"
           >
             {uploading ? (
