@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Plus, X, ChevronLeft, ChevronRight, Eye, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,37 @@ interface StoryViewer {
   avatar_url: string | null;
 }
 
+// Preloaded images cache
+const preloadedImages = new Map<string, HTMLImageElement>();
+
+const preloadImage = (url: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (preloadedImages.has(url)) {
+      resolve();
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      preloadedImages.set(url, img);
+      resolve();
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+};
+
+const preloadVideo = (url: string): Promise<void> => {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.oncanplaythrough = () => resolve();
+    video.onerror = () => resolve(); // Resolve anyway to not block
+    video.src = url;
+    // Start loading
+    video.load();
+  });
+};
+
 const StoriesCarousel = () => {
   const { user } = useAuth();
   const [userStoriesMap, setUserStoriesMap] = useState<UserStories[]>([]);
@@ -50,6 +81,7 @@ const StoriesCarousel = () => {
   const [storyProgress, setStoryProgress] = useState(0);
   const [storyViewers, setStoryViewers] = useState<StoryViewer[]>([]);
   const [showViewers, setShowViewers] = useState(false);
+  const [isMediaLoading, setIsMediaLoading] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -169,6 +201,42 @@ const StoriesCarousel = () => {
     }
   };
 
+  // Preload next stories when viewing
+  const preloadNextStories = useCallback(async () => {
+    if (viewingUserIndex === null) return;
+
+    const currentUserStories = userStoriesMap[viewingUserIndex];
+    const nextStoryIndex = currentStoryIndex + 1;
+
+    // Priority 1: Next story in current user's set
+    if (nextStoryIndex < currentUserStories.stories.length) {
+      const nextStory = currentUserStories.stories[nextStoryIndex];
+      if (nextStory.media_type === 'video') {
+        preloadVideo(nextStory.media_url);
+      } else {
+        preloadImage(nextStory.media_url);
+      }
+    }
+
+    // Priority 2: First story of next user
+    const nextUserIndex = viewingUserIndex + 1;
+    if (nextUserIndex < userStoriesMap.length) {
+      const nextUserFirstStory = userStoriesMap[nextUserIndex].stories[0];
+      if (nextUserFirstStory) {
+        if (nextUserFirstStory.media_type === 'video') {
+          preloadVideo(nextUserFirstStory.media_url);
+        } else {
+          preloadImage(nextUserFirstStory.media_url);
+        }
+      }
+    }
+  }, [viewingUserIndex, currentStoryIndex, userStoriesMap]);
+
+  // Trigger preloading when story changes
+  useEffect(() => {
+    preloadNextStories();
+  }, [preloadNextStories]);
+
   const startStoryProgress = useCallback(() => {
     setStoryProgress(0);
     
@@ -179,8 +247,8 @@ const StoriesCarousel = () => {
     const currentUserStories = viewingUserIndex !== null ? userStoriesMap[viewingUserIndex] : null;
     const currentStory = currentUserStories?.stories[currentStoryIndex];
     
-    // Don't auto-advance for videos (handled by onEnded)
-    if (currentStory?.media_type === 'video') return;
+    // Don't auto-advance for videos (handled by onEnded) or while loading
+    if (currentStory?.media_type === 'video' || isMediaLoading) return;
 
     const startTime = Date.now();
     progressIntervalRef.current = setInterval(() => {
@@ -192,10 +260,10 @@ const StoriesCarousel = () => {
         goToNextStory();
       }
     }, 50);
-  }, [viewingUserIndex, currentStoryIndex, userStoriesMap]);
+  }, [viewingUserIndex, currentStoryIndex, userStoriesMap, isMediaLoading]);
 
   useEffect(() => {
-    if (viewingUserIndex !== null) {
+    if (viewingUserIndex !== null && !isMediaLoading) {
       startStoryProgress();
     }
     
@@ -204,12 +272,15 @@ const StoriesCarousel = () => {
         clearInterval(progressIntervalRef.current);
       }
     };
-  }, [viewingUserIndex, currentStoryIndex, startStoryProgress]);
+  }, [viewingUserIndex, currentStoryIndex, startStoryProgress, isMediaLoading]);
 
   const goToNextStory = useCallback(() => {
     if (viewingUserIndex === null) return;
 
     const currentUserStories = userStoriesMap[viewingUserIndex];
+    
+    // Set loading state for transition
+    setIsMediaLoading(true);
     
     if (currentStoryIndex < currentUserStories.stories.length - 1) {
       setCurrentStoryIndex(prev => prev + 1);
@@ -223,6 +294,9 @@ const StoriesCarousel = () => {
 
   const goToPreviousStory = useCallback(() => {
     if (viewingUserIndex === null) return;
+
+    // Set loading state for transition
+    setIsMediaLoading(true);
 
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex(prev => prev - 1);
@@ -242,11 +316,13 @@ const StoriesCarousel = () => {
     setStoryProgress(0);
     setShowViewers(false);
     setStoryViewers([]);
+    setIsMediaLoading(false);
   };
 
   const viewUserStories = async (userIndex: number) => {
     if (!user) return;
     
+    setIsMediaLoading(true);
     setViewingUserIndex(userIndex);
     setCurrentStoryIndex(0);
     
@@ -257,8 +333,10 @@ const StoriesCarousel = () => {
       setCurrentStoryIndex(firstUnviewedIndex);
     }
 
-    // Mark first story as viewed
+    // Preload the first story
     const storyToView = userStories.stories[firstUnviewedIndex !== -1 ? firstUnviewedIndex : 0];
+    
+    // Mark first story as viewed
     if (!storyToView.hasViewed && storyToView.user_id !== user.id) {
       await supabase.from('story_views').insert({
         story_id: storyToView.id,
@@ -521,15 +599,24 @@ const StoriesCarousel = () => {
               </div>
 
               {/* Story Content */}
-              <div className="flex-1 flex items-center justify-center bg-black">
+              <div className="flex-1 flex items-center justify-center bg-black relative">
+                {/* Loading Spinner */}
+                {isMediaLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <Loader2 className="w-10 h-10 text-white animate-spin" />
+                  </div>
+                )}
+                
                 {currentStory.media_type === 'video' ? (
                   <video
                     ref={videoRef}
                     src={currentStory.media_url}
-                    className="max-w-full max-h-full object-contain"
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-200 ${isMediaLoading ? 'opacity-0' : 'opacity-100'}`}
                     autoPlay
                     playsInline
                     onEnded={goToNextStory}
+                    onCanPlay={() => setIsMediaLoading(false)}
+                    onLoadedData={() => setIsMediaLoading(false)}
                     onTimeUpdate={(e) => {
                       const video = e.currentTarget;
                       const progress = (video.currentTime / video.duration) * 100;
@@ -540,7 +627,8 @@ const StoriesCarousel = () => {
                   <img
                     src={currentStory.media_url}
                     alt="Story"
-                    className="max-w-full max-h-full object-contain"
+                    className={`max-w-full max-h-full object-contain transition-opacity duration-200 ${isMediaLoading ? 'opacity-0' : 'opacity-100'}`}
+                    onLoad={() => setIsMediaLoading(false)}
                   />
                 )}
               </div>
