@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Moon, Sun, LogOut, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import AccountSettings from './AccountSettings';
 
 const Header = () => {
   const { theme, toggleTheme } = useTheme();
@@ -25,6 +26,7 @@ const Header = () => {
         </div>
         
         <div className="flex items-center gap-2">
+          <AccountSettings />
           <Button
             variant="ghost"
             size="icon"
