@@ -129,6 +129,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_online: boolean | null
+          last_name_change: string | null
           last_seen: string | null
           updated_at: string | null
           username: string | null
@@ -139,6 +140,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_online?: boolean | null
+          last_name_change?: string | null
           last_seen?: string | null
           updated_at?: string | null
           username?: string | null
@@ -149,6 +151,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_online?: boolean | null
+          last_name_change?: string | null
           last_seen?: string | null
           updated_at?: string | null
           username?: string | null
