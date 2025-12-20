@@ -5,13 +5,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Loader2 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { WORLD_CHAT_ID } from '@/lib/constants';
 import { renderMessageContent } from '@/lib/linkify';
 import { compressImage } from '@/lib/imageCompression';
 import { Progress } from '@/components/ui/progress';
+import MessageMedia from '@/components/chat/MessageMedia';
 
 interface Message {
   id: string;
@@ -284,34 +285,32 @@ const Chat = () => {
     if (selectedFiles.length > 0) {
       setUploading(true);
       setUploadProgress(0);
-      
+
       const totalFiles = selectedFiles.length;
       let uploadedCount = 0;
 
+      const imageUrls: string[] = [];
+      const otherUploads: Array<{ url: string; type: string }> = [];
+
       for (const fileInfo of selectedFiles) {
         try {
-          // Compress image if applicable
           let fileToUpload = fileInfo.file;
+
           if (fileInfo.file.type.startsWith('image/')) {
-            fileToUpload = await compressImage(fileInfo.file);
+            fileToUpload = await compressImage(fileInfo.file, {
+              maxWidth: 1280,
+              maxHeight: 1280,
+              quality: 0.8,
+              outputType: 'image/jpeg',
+            });
           }
 
           const mediaUrl = await uploadFile(fileToUpload);
           const mediaType = getMediaType(fileInfo.file);
 
           if (mediaUrl) {
-            // Create a message for each file
-            const content = uploadedCount === 0 && messageContent 
-              ? messageContent 
-              : (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📎 File');
-            
-            await supabase.from('messages').insert({
-              conversation_id: id,
-              sender_id: user.id,
-              content,
-              media_url: mediaUrl,
-              media_type: mediaType,
-            });
+            if (mediaType === 'image') imageUrls.push(mediaUrl);
+            else otherUploads.push({ url: mediaUrl, type: mediaType });
           }
 
           uploadedCount++;
@@ -320,6 +319,49 @@ const Chat = () => {
           console.error('Upload error:', error);
           toast.error(`Failed to upload ${fileInfo.file.name}`);
         }
+      }
+
+      try {
+        const usesCaptionForMedia = messageContent.length > 0;
+
+        // Images: send as a single bubble (gallery) when multiple
+        if (imageUrls.length > 1) {
+          await supabase.from('messages').insert({
+            conversation_id: id,
+            sender_id: user.id,
+            content: usesCaptionForMedia ? messageContent : '📷 Photos',
+            media_type: 'gallery',
+            media_url: JSON.stringify(imageUrls),
+          });
+        } else if (imageUrls.length === 1) {
+          await supabase.from('messages').insert({
+            conversation_id: id,
+            sender_id: user.id,
+            content: usesCaptionForMedia ? messageContent : '📷 Photo',
+            media_type: 'image',
+            media_url: imageUrls[0],
+          });
+        }
+
+        // Non-images: send one bubble per file (caption only if we didn't use it on images)
+        for (let i = 0; i < otherUploads.length; i++) {
+          const u = otherUploads[i];
+          const shouldUseCaption = messageContent.length > 0 && imageUrls.length === 0 && i === 0;
+
+          const fallbackLabel =
+            u.type === 'video' ? '🎥 Video' : u.type === 'document' ? '📎 File' : '📎 File';
+
+          await supabase.from('messages').insert({
+            conversation_id: id,
+            sender_id: user.id,
+            content: shouldUseCaption ? messageContent : fallbackLabel,
+            media_url: u.url,
+            media_type: u.type,
+          });
+        }
+      } catch (err) {
+        console.error('Error creating media message(s):', err);
+        toast.error('Failed to send media');
       }
 
       clearSelectedFiles();
@@ -348,47 +390,6 @@ const Chat = () => {
     setSending(false);
   };
 
-  const renderMediaContent = (message: Message) => {
-    if (!message.media_url) return null;
-
-    if (message.media_type === 'image') {
-      return (
-        <img 
-          src={message.media_url} 
-          alt="Shared image" 
-          className="max-w-full rounded-lg mb-2 cursor-pointer hover:opacity-90 transition-opacity"
-          style={{ maxHeight: '300px' }}
-          onClick={() => window.open(message.media_url!, '_blank')}
-        />
-      );
-    }
-
-    if (message.media_type === 'video') {
-      return (
-        <video 
-          src={message.media_url} 
-          controls 
-          className="max-w-full rounded-lg mb-2"
-          style={{ maxHeight: '300px' }}
-        />
-      );
-    }
-
-    // Document/other files
-    const fileName = message.media_url.split('/').pop() || 'File';
-    return (
-      <a 
-        href={message.media_url} 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="flex items-center gap-2 p-2 bg-background/20 rounded-lg mb-2 hover:bg-background/30 transition-colors"
-      >
-        <FileText className="w-5 h-5" />
-        <span className="text-sm truncate flex-1">{fileName}</span>
-        <Download className="w-4 h-4" />
-      </a>
-    );
-  };
 
   if (loading) {
     return (
@@ -507,10 +508,14 @@ const Chat = () => {
                           {sender.full_name || sender.username || 'Unknown'}
                         </p>
                       )}
-                      {renderMediaContent(message)}
-                      {(!message.media_url || message.content !== '📷 Photo' && message.content !== '🎥 Video' && message.content !== '📎 File') && (
-                        <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
-                      )}
+                      <MessageMedia message={message} />
+                      {(() => {
+                        const placeholders = new Set(['📷 Photo', '📷 Photos', '🎥 Video', '📎 File']);
+                        const shouldShowText = message.content?.trim().length > 0 && !placeholders.has(message.content);
+                        return shouldShowText ? (
+                          <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
+                        ) : null;
+                      })()}
                       <p className={`text-xs mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {format(new Date(message.created_at), 'h:mm a')}
                       </p>

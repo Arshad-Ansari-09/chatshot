@@ -94,7 +94,7 @@ const SearchBar = () => {
           .from('conversations')
           .select('is_group')
           .eq('id', existingConvo.conversation_id)
-          .single();
+          .maybeSingle();
 
         if (convoData && !convoData.is_group) {
           navigate(`/chat/${existingConvo.conversation_id}`);
@@ -106,17 +106,20 @@ const SearchBar = () => {
       }
 
       // Create new private conversation
-      const convoId = crypto.randomUUID();
-
-      const { error: convoError } = await supabase
+      const { data: convo, error: convoError } = await supabase
         .from('conversations')
-        .insert({ id: convoId, is_group: false });
+        .insert({ is_group: false })
+        .select('id')
+        .single();
 
-      if (convoError) {
+      if (convoError || !convo?.id) {
+        console.error('Conversation insert error:', convoError);
         toast.error('Failed to create conversation');
         setLoadingUserId(null);
         return;
       }
+
+      const convoId = convo.id;
 
       // Add current user as participant first
       const { error: selfParticipantError } = await supabase

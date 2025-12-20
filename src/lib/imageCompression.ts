@@ -13,7 +13,7 @@ interface CompressionOptions {
 const DEFAULT_OPTIONS: CompressionOptions = {
   maxWidth: 1280,
   maxHeight: 1280,
-  quality: 0.75,
+  quality: 0.8,
   outputType: 'image/jpeg',
 };
 
