@@ -143,8 +143,10 @@ const Chat = () => {
     return urlData.publicUrl;
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
+    }
   };
 
   const fetchMessages = async () => {
@@ -162,6 +164,9 @@ const Chat = () => {
     }
 
     setMessages(data || []);
+
+    // Scroll to bottom instantly after loading messages
+    setTimeout(() => scrollToBottom(true), 50);
 
     // Mark messages as read
     await supabase
@@ -269,8 +274,14 @@ const Chat = () => {
     };
   }, [id, user]);
 
+  // Auto-scroll when new messages arrive
+  const prevMessagesCount = useRef(messages.length);
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length > prevMessagesCount.current) {
+      // New message arrived - smooth scroll
+      scrollToBottom(false);
+    }
+    prevMessagesCount.current = messages.length;
   }, [messages]);
 
   const sendMessage = async (e: React.FormEvent) => {
