@@ -87,7 +87,7 @@ const StoriesCarousel = () => {
   const [storyViewers, setStoryViewers] = useState<StoryViewer[]>([]);
   const [showViewers, setShowViewers] = useState(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<StoryVisibility>('world');
+  const [activeTab, setActiveTab] = useState<StoryVisibility>('friends');
   const [newStoryVisibility, setNewStoryVisibility] = useState<StoryVisibility>('world');
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
   
