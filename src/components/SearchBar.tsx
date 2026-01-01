@@ -69,86 +69,36 @@ const SearchBar = () => {
     if (!user || loadingUserId) return;
 
     setLoadingUserId(profile.id);
+    console.log('[startConversation] Initiating chat with:', profile.id);
 
     try {
-      // Check if a private conversation already exists (excluding World Chat)
-      const { data: existingParticipants } = await supabase
-        .from('conversation_participants')
-        .select('conversation_id')
-        .eq('user_id', user.id)
-        .neq('conversation_id', WORLD_CHAT_ID);
+      // Use the atomic RPC function for get-or-create logic
+      const { data: conversationId, error: rpcError } = await supabase
+        .rpc('get_or_create_private_conversation', { _other_user_id: profile.id });
 
-      const { data: otherParticipants } = await supabase
-        .from('conversation_participants')
-        .select('conversation_id')
-        .eq('user_id', profile.id)
-        .neq('conversation_id', WORLD_CHAT_ID);
-
-      // Find conversation that exists in both sets (1:1 private chat)
-      const userConvos = new Set(existingParticipants?.map(p => p.conversation_id) || []);
-      const existingConvo = otherParticipants?.find(p => userConvos.has(p.conversation_id));
-
-      if (existingConvo) {
-        // Verify it's not a group chat
-        const { data: convoData } = await supabase
-          .from('conversations')
-          .select('is_group')
-          .eq('id', existingConvo.conversation_id)
-          .maybeSingle();
-
-        if (convoData && !convoData.is_group) {
-          navigate(`/chat/${existingConvo.conversation_id}`);
-          setQuery('');
-          setShowResults(false);
-          setLoadingUserId(null);
-          return;
-        }
-      }
-
-      // Create new private conversation
-      const { data: convo, error: convoError } = await supabase
-        .from('conversations')
-        .insert({ is_group: false })
-        .select('id')
-        .single();
-
-      if (convoError || !convo?.id) {
-        console.error('Conversation insert error:', convoError);
+      if (rpcError) {
+        console.error('[startConversation] RPC error:', {
+          code: rpcError.code,
+          message: rpcError.message,
+          details: rpcError.details,
+          hint: rpcError.hint,
+        });
         toast.error('Failed to create conversation');
-        setLoadingUserId(null);
         return;
       }
 
-      const convoId = convo.id;
-
-      // Add current user as participant first
-      const { error: selfParticipantError } = await supabase
-        .from('conversation_participants')
-        .insert({ conversation_id: convoId, user_id: user.id });
-
-      if (selfParticipantError) {
-        toast.error('Failed to add participants');
-        setLoadingUserId(null);
+      if (!conversationId) {
+        console.error('[startConversation] No conversation ID returned');
+        toast.error('Failed to create conversation');
         return;
       }
 
-      // Add other user as participant
-      const { error: otherParticipantError } = await supabase
-        .from('conversation_participants')
-        .insert({ conversation_id: convoId, user_id: profile.id });
-
-      if (otherParticipantError) {
-        toast.error('Failed to add participants');
-        setLoadingUserId(null);
-        return;
-      }
-
-      // Navigate to the new private chat
-      navigate(`/chat/${convoId}`);
+      console.log('[startConversation] Success, navigating to:', conversationId);
+      navigate(`/chat/${conversationId}`);
       setQuery('');
       setShowResults(false);
     } catch (error) {
-      console.error('Error starting conversation:', error);
+      console.error('[startConversation] Unexpected error:', error);
       toast.error('Failed to start conversation');
     } finally {
       setLoadingUserId(null);
