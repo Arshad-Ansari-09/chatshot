@@ -1,13 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, X, ChevronLeft, ChevronRight, Eye, Loader2 } from 'lucide-react';
+import { Plus, X, ChevronLeft, ChevronRight, Eye, Loader2, Globe, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { WORLD_CHAT_ID } from '@/lib/constants';
+
+type StoryVisibility = 'world' | 'friends';
 
 interface Story {
   id: string;
@@ -17,6 +21,7 @@ interface Story {
   caption: string | null;
   created_at: string;
   hasViewed: boolean;
+  visibility: StoryVisibility;
 }
 
 interface UserStories {
@@ -82,12 +87,48 @@ const StoriesCarousel = () => {
   const [storyViewers, setStoryViewers] = useState<StoryViewer[]>([]);
   const [showViewers, setShowViewers] = useState(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<StoryVisibility>('world');
+  const [newStoryVisibility, setNewStoryVisibility] = useState<StoryVisibility>('world');
+  const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const STORY_DURATION = 5000; // 5 seconds for images
+
+  // Fetch friend IDs (users with active conversations)
+  const fetchFriendIds = useCallback(async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id')
+      .neq('conversation_id', WORLD_CHAT_ID);
+
+    if (error) {
+      console.error('Error fetching friends:', error);
+      return;
+    }
+
+    // Find all conversation_ids the current user is part of
+    const myConversations = new Set(
+      data?.filter(p => p.user_id === user.id).map(p => p.conversation_id) || []
+    );
+
+    // Get all other users from those conversations
+    const friends = new Set(
+      data
+        ?.filter(p => myConversations.has(p.conversation_id) && p.user_id !== user.id)
+        .map(p => p.user_id) || []
+    );
+
+    setFriendIds(friends);
+  }, [user]);
+
+  useEffect(() => {
+    fetchFriendIds();
+  }, [fetchFriendIds]);
 
   const fetchStories = useCallback(async () => {
     if (!user) return;
@@ -101,6 +142,7 @@ const StoriesCarousel = () => {
         media_type,
         caption,
         created_at,
+        visibility,
         profiles!stories_user_id_fkey (
           username,
           full_name,
@@ -135,6 +177,7 @@ const StoriesCarousel = () => {
         caption: story.caption,
         created_at: story.created_at,
         hasViewed: viewedStoryIds.has(story.id),
+        visibility: story.visibility || 'world',
       };
 
       if (!userMap.has(story.user_id)) {
@@ -164,6 +207,25 @@ const StoriesCarousel = () => {
 
     setUserStoriesMap(sortedUsers);
   }, [user]);
+
+  // Filter stories based on active tab
+  const filteredUserStoriesMap = userStoriesMap.map(userStories => {
+    const filteredStories = userStories.stories.filter(story => {
+      if (activeTab === 'world') {
+        return story.visibility === 'world';
+      } else {
+        // Friends tab: show friends' stories only (including own)
+        return story.visibility === 'friends' && 
+          (friendIds.has(story.user_id) || story.user_id === user?.id);
+      }
+    });
+
+    return {
+      ...userStories,
+      stories: filteredStories,
+      hasUnviewedStories: filteredStories.some(s => !s.hasViewed),
+    };
+  }).filter(userStories => userStories.stories.length > 0);
 
   useEffect(() => {
     fetchStories();
@@ -419,6 +481,7 @@ const StoriesCarousel = () => {
         media_url: publicUrl,
         media_type: mediaType,
         caption: newStoryCaption.trim() || null,
+        visibility: newStoryVisibility,
       });
 
       if (insertError) throw insertError;
@@ -438,19 +501,34 @@ const StoriesCarousel = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
     setNewStoryCaption('');
+    setNewStoryVisibility('world');
     setIsAddingStory(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const currentUserStories = viewingUserIndex !== null ? userStoriesMap[viewingUserIndex] : null;
+  const currentUserStories = viewingUserIndex !== null ? filteredUserStoriesMap[viewingUserIndex] : null;
   const currentStory = currentUserStories?.stories[currentStoryIndex];
   const isOwnStory = currentStory?.user_id === user?.id;
 
   return (
     <div className="bg-card rounded-2xl p-4 shadow-card">
-      <h2 className="text-sm font-semibold text-muted-foreground mb-3">Stories</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-muted-foreground">Stories</h2>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as StoryVisibility)}>
+          <TabsList className="h-8">
+            <TabsTrigger value="world" className="text-xs px-3 h-6 gap-1">
+              <Globe className="w-3 h-3" />
+              World
+            </TabsTrigger>
+            <TabsTrigger value="friends" className="text-xs px-3 h-6 gap-1">
+              <Users className="w-3 h-3" />
+              Friends
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
       <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
         {/* Add Story Button */}
         <button 
@@ -474,7 +552,7 @@ const StoriesCarousel = () => {
         />
 
         {/* User Stories */}
-        {userStoriesMap.map((userStories, index) => (
+        {filteredUserStoriesMap.map((userStories, index) => (
           <button
             key={userStories.user_id}
             className="flex-shrink-0 flex flex-col items-center gap-2"
@@ -528,6 +606,33 @@ const StoriesCarousel = () => {
               value={newStoryCaption}
               onChange={(e) => setNewStoryCaption(e.target.value)}
             />
+            
+            {/* Visibility Toggle */}
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <span className="text-sm font-medium text-foreground">Post to:</span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={newStoryVisibility === 'world' ? 'default' : 'outline'}
+                  onClick={() => setNewStoryVisibility('world')}
+                  className="gap-1"
+                >
+                  <Globe className="w-4 h-4" />
+                  World
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={newStoryVisibility === 'friends' ? 'default' : 'outline'}
+                  onClick={() => setNewStoryVisibility('friends')}
+                  className="gap-1"
+                >
+                  <Users className="w-4 h-4" />
+                  Friends
+                </Button>
+              </div>
+            </div>
             
             <div className="flex gap-2">
               <Button 

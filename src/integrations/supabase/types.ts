@@ -167,6 +167,7 @@ export type Database = {
           media_type: string | null
           media_url: string
           user_id: string
+          visibility: string
         }
         Insert: {
           caption?: string | null
@@ -176,6 +177,7 @@ export type Database = {
           media_type?: string | null
           media_url: string
           user_id: string
+          visibility?: string
         }
         Update: {
           caption?: string | null
@@ -185,6 +187,7 @@ export type Database = {
           media_type?: string | null
           media_url?: string
           user_id?: string
+          visibility?: string
         }
         Relationships: [
           {
