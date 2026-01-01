@@ -237,6 +237,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_or_create_private_conversation: {
+        Args: { _other_user_id: string }
+        Returns: string
+      }
       is_conversation_member: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
