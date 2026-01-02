@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, X, ChevronLeft, ChevronRight, Eye, Loader2, Globe, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -90,10 +90,13 @@ const StoriesCarousel = () => {
   const [activeTab, setActiveTab] = useState<StoryVisibility>('friends');
   const [newStoryVisibility, setNewStoryVisibility] = useState<StoryVisibility>('world');
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
+  const [isPaused, setIsPaused] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressStartTimeRef = useRef<number>(0);
+  const elapsedBeforePauseRef = useRef<number>(0);
 
   const STORY_DURATION = 5000; // 5 seconds for images
 
@@ -305,6 +308,7 @@ const StoriesCarousel = () => {
 
   const startStoryProgress = useCallback(() => {
     setStoryProgress(0);
+    elapsedBeforePauseRef.current = 0;
     
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
@@ -314,11 +318,11 @@ const StoriesCarousel = () => {
     const currentStory = currentUserStories?.stories[currentStoryIndex];
     
     // Don't auto-advance for videos (handled by onEnded) or while loading
-    if (currentStory?.media_type === 'video' || isMediaLoading) return;
+    if (currentStory?.media_type === 'video' || isMediaLoading || isPaused) return;
 
-    const startTime = Date.now();
+    progressStartTimeRef.current = Date.now();
     progressIntervalRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTime;
+      const elapsed = elapsedBeforePauseRef.current + (Date.now() - progressStartTimeRef.current);
       const progress = Math.min((elapsed / STORY_DURATION) * 100, 100);
       setStoryProgress(progress);
 
@@ -326,7 +330,51 @@ const StoriesCarousel = () => {
         goToNextStory();
       }
     }, 50);
-  }, [viewingUserIndex, currentStoryIndex, userStoriesMap, isMediaLoading]);
+  }, [viewingUserIndex, currentStoryIndex, userStoriesMap, isMediaLoading, isPaused]);
+
+  const pauseStory = useCallback(() => {
+    if (isPaused) return;
+    setIsPaused(true);
+    
+    // Calculate elapsed time before pause
+    elapsedBeforePauseRef.current += Date.now() - progressStartTimeRef.current;
+    
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    
+    // Pause video if playing
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+  }, [isPaused]);
+
+  const resumeStory = useCallback(() => {
+    if (!isPaused) return;
+    setIsPaused(false);
+    
+    const currentUserStories = viewingUserIndex !== null ? userStoriesMap[viewingUserIndex] : null;
+    const currentStory = currentUserStories?.stories[currentStoryIndex];
+    
+    // Resume video if it exists
+    if (videoRef.current && currentStory?.media_type === 'video') {
+      videoRef.current.play();
+      return;
+    }
+    
+    // Resume progress timer for images
+    progressStartTimeRef.current = Date.now();
+    progressIntervalRef.current = setInterval(() => {
+      const elapsed = elapsedBeforePauseRef.current + (Date.now() - progressStartTimeRef.current);
+      const progress = Math.min((elapsed / STORY_DURATION) * 100, 100);
+      setStoryProgress(progress);
+
+      if (progress >= 100) {
+        goToNextStory();
+      }
+    }, 50);
+  }, [isPaused, viewingUserIndex, currentStoryIndex, userStoriesMap]);
 
   useEffect(() => {
     if (viewingUserIndex !== null && !isMediaLoading) {
@@ -340,10 +388,33 @@ const StoriesCarousel = () => {
     };
   }, [viewingUserIndex, currentStoryIndex, startStoryProgress, isMediaLoading]);
 
-  const goToNextStory = useCallback(() => {
+  const recordStoryView = useCallback(async (storyId: string, storyUserId: string) => {
+    if (!user || storyUserId === user.id) return;
+    
+    try {
+      await supabase.from('story_views').upsert({
+        story_id: storyId,
+        viewer_id: user.id,
+      }, { onConflict: 'story_id,viewer_id' });
+    } catch (error) {
+      console.error('Error recording story view:', error);
+    }
+  }, [user]);
+
+  const goToNextStory = useCallback(async () => {
     if (viewingUserIndex === null) return;
 
     const currentUserStories = userStoriesMap[viewingUserIndex];
+    const currentStory = currentUserStories?.stories[currentStoryIndex];
+    
+    // Record view when story finishes or is skipped
+    if (currentStory) {
+      await recordStoryView(currentStory.id, currentStory.user_id);
+    }
+    
+    // Reset pause state
+    setIsPaused(false);
+    elapsedBeforePauseRef.current = 0;
     
     // Set loading state for transition
     setIsMediaLoading(true);
@@ -356,10 +427,22 @@ const StoriesCarousel = () => {
     } else {
       closeStoryViewer();
     }
-  }, [viewingUserIndex, currentStoryIndex, userStoriesMap]);
+  }, [viewingUserIndex, currentStoryIndex, userStoriesMap, recordStoryView]);
 
-  const goToPreviousStory = useCallback(() => {
+  const goToPreviousStory = useCallback(async () => {
     if (viewingUserIndex === null) return;
+
+    const currentUserStories = userStoriesMap[viewingUserIndex];
+    const currentStory = currentUserStories?.stories[currentStoryIndex];
+    
+    // Record view when skipping back
+    if (currentStory) {
+      await recordStoryView(currentStory.id, currentStory.user_id);
+    }
+    
+    // Reset pause state
+    setIsPaused(false);
+    elapsedBeforePauseRef.current = 0;
 
     // Set loading state for transition
     setIsMediaLoading(true);
@@ -371,7 +454,7 @@ const StoriesCarousel = () => {
       setViewingUserIndex(prevUserIndex);
       setCurrentStoryIndex(userStoriesMap[prevUserIndex].stories.length - 1);
     }
-  }, [viewingUserIndex, currentStoryIndex, userStoriesMap]);
+  }, [viewingUserIndex, currentStoryIndex, userStoriesMap, recordStoryView]);
 
   const closeStoryViewer = () => {
     if (progressIntervalRef.current) {
@@ -383,32 +466,25 @@ const StoriesCarousel = () => {
     setShowViewers(false);
     setStoryViewers([]);
     setIsMediaLoading(false);
+    setIsPaused(false);
+    elapsedBeforePauseRef.current = 0;
   };
 
   const viewUserStories = async (userIndex: number) => {
     if (!user) return;
     
     setIsMediaLoading(true);
+    setIsPaused(false);
+    elapsedBeforePauseRef.current = 0;
     setViewingUserIndex(userIndex);
-    setCurrentStoryIndex(0);
     
-    const userStories = userStoriesMap[userIndex];
+    const userStories = filteredUserStoriesMap[userIndex];
+    
+    // Find the first unviewed story (resume from last seen)
     const firstUnviewedIndex = userStories.stories.findIndex(s => !s.hasViewed);
+    const startIndex = firstUnviewedIndex !== -1 ? firstUnviewedIndex : 0;
     
-    if (firstUnviewedIndex !== -1) {
-      setCurrentStoryIndex(firstUnviewedIndex);
-    }
-
-    // Preload the first story
-    const storyToView = userStories.stories[firstUnviewedIndex !== -1 ? firstUnviewedIndex : 0];
-    
-    // Mark first story as viewed
-    if (!storyToView.hasViewed && storyToView.user_id !== user.id) {
-      await supabase.from('story_views').insert({
-        story_id: storyToView.id,
-        viewer_id: user.id,
-      });
-    }
+    setCurrentStoryIndex(startIndex);
   };
 
   useEffect(() => {
@@ -584,8 +660,8 @@ const StoriesCarousel = () => {
       {/* Upload Story Modal */}
       <Dialog open={isAddingStory} onOpenChange={(open) => !open && resetUploadForm()}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="text-lg font-semibold">Add New Story</DialogTitle>
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Add New Story</h3>
             
             {previewUrl && (
               <div className="relative w-full aspect-[9/16] max-h-[50vh] bg-muted rounded-lg overflow-hidden">
@@ -660,15 +736,27 @@ const StoriesCarousel = () => {
 
       {/* Story Viewer Modal */}
       <Dialog open={viewingUserIndex !== null} onOpenChange={(open) => !open && closeStoryViewer()}>
-        <DialogContent className="max-w-lg w-full h-[90vh] p-0 bg-black border-0 overflow-hidden">
+        <DialogContent 
+          hideCloseButton
+          className="max-w-lg w-full h-[90vh] p-0 bg-black border-0 overflow-hidden"
+          aria-describedby={undefined}
+        >
+          <DialogTitle className="sr-only">Story Viewer</DialogTitle>
           {currentUserStories && currentStory && (
-            <div className="relative w-full h-full flex flex-col">
+            <div 
+              className="relative w-full h-full flex flex-col select-none"
+              onMouseDown={pauseStory}
+              onMouseUp={resumeStory}
+              onMouseLeave={resumeStory}
+              onTouchStart={pauseStory}
+              onTouchEnd={resumeStory}
+            >
               {/* Progress bars */}
-              <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2">
+              <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2 pointer-events-none">
                 {currentUserStories.stories.map((_, idx) => (
                   <div key={idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-white transition-all duration-100"
+                      className={`h-full bg-white ${isPaused ? '' : 'transition-all duration-100'}`}
                       style={{ 
                         width: idx < currentStoryIndex 
                           ? '100%' 
@@ -682,7 +770,7 @@ const StoriesCarousel = () => {
               </div>
 
               {/* Header */}
-              <div className="absolute top-6 left-0 right-0 z-20 flex items-center justify-between px-4">
+              <div className="absolute top-6 left-0 right-0 z-20 flex items-center justify-between px-4 pointer-events-none">
                 <div className="flex items-center gap-3">
                   <Avatar className="w-10 h-10 border-2 border-white">
                     <AvatarImage src={currentUserStories.profile.avatar_url || undefined} />
@@ -696,12 +784,18 @@ const StoriesCarousel = () => {
                     </p>
                     <p className="text-xs text-white/70">
                       {new Date(currentStory.created_at).toLocaleTimeString()}
+                      {isPaused && <span className="ml-2">(Paused)</span>}
                     </p>
                   </div>
                 </div>
                 <button 
-                  onClick={closeStoryViewer}
-                  className="p-2 rounded-full bg-black/20 hover:bg-black/40 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeStoryViewer();
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className="p-2 rounded-full bg-black/20 hover:bg-black/40 transition-colors pointer-events-auto"
                 >
                   <X className="w-5 h-5 text-white" />
                 </button>
@@ -711,7 +805,7 @@ const StoriesCarousel = () => {
               <div className="flex-1 flex items-center justify-center bg-black relative">
                 {/* Loading Spinner */}
                 {isMediaLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
                     <Loader2 className="w-10 h-10 text-white animate-spin" />
                   </div>
                 )}
@@ -738,6 +832,7 @@ const StoriesCarousel = () => {
                     alt="Story"
                     className={`max-w-full max-h-full object-contain transition-opacity duration-200 ${isMediaLoading ? 'opacity-0' : 'opacity-100'}`}
                     onLoad={() => setIsMediaLoading(false)}
+                    draggable={false}
                   />
                 )}
               </div>
@@ -745,11 +840,21 @@ const StoriesCarousel = () => {
               {/* Navigation Areas */}
               <button 
                 className="absolute left-0 top-20 bottom-20 w-1/3 z-10"
-                onClick={goToPreviousStory}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToPreviousStory();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
               />
               <button 
                 className="absolute right-0 top-20 bottom-20 w-1/3 z-10"
-                onClick={goToNextStory}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToNextStory();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
               />
 
               {/* Caption */}
