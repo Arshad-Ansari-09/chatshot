@@ -211,12 +211,16 @@ const StoriesCarousel = () => {
   // Filter stories based on active tab
   const filteredUserStoriesMap = userStoriesMap.map(userStories => {
     const filteredStories = userStories.stories.filter(story => {
+      // Always show current user's own stories regardless of tab
+      if (story.user_id === user?.id) {
+        return true;
+      }
+      
       if (activeTab === 'world') {
         return story.visibility === 'world';
       } else {
-        // Friends tab: show friends' stories only (including own)
-        return story.visibility === 'friends' && 
-          (friendIds.has(story.user_id) || story.user_id === user?.id);
+        // Friends tab: show friends' stories with 'friends' visibility
+        return story.visibility === 'friends' && friendIds.has(story.user_id);
       }
     });
 
