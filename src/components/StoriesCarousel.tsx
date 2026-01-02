@@ -518,13 +518,13 @@ const StoriesCarousel = () => {
         <h2 className="text-sm font-semibold text-muted-foreground">Stories</h2>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as StoryVisibility)}>
           <TabsList className="h-8">
-            <TabsTrigger value="world" className="text-xs px-3 h-6 gap-1">
-              <Globe className="w-3 h-3" />
-              World
-            </TabsTrigger>
             <TabsTrigger value="friends" className="text-xs px-3 h-6 gap-1">
               <Users className="w-3 h-3" />
               Friends
+            </TabsTrigger>
+            <TabsTrigger value="world" className="text-xs px-3 h-6 gap-1">
+              <Globe className="w-3 h-3" />
+              World
             </TabsTrigger>
           </TabsList>
         </Tabs>
