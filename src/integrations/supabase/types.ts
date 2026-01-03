@@ -249,6 +249,15 @@ export type Database = {
         Returns: boolean
       }
       is_world_chat: { Args: { conversation_id: string }; Returns: boolean }
+      search_users: {
+        Args: { search_query: string }
+        Returns: {
+          avatar_url: string
+          full_name: string
+          id: string
+          username: string
+        }[]
+      }
       shares_conversation_with: {
         Args: { _profile_id: string; _viewer_id: string }
         Returns: boolean
