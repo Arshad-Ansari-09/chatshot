@@ -46,16 +46,13 @@ const SearchBar = () => {
       setIsSearching(true);
       
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, full_name, avatar_url')
-        .neq('id', user.id)
-        .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
-        .limit(10);
+        .rpc('search_users', { search_query: query.trim() });
 
       if (error) {
         console.error('Search error:', error);
+        setResults([]);
       } else {
-        setResults(data || []);
+        setResults((data as Profile[]) || []);
       }
       
       setIsSearching(false);
