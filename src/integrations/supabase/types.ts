@@ -249,6 +249,10 @@ export type Database = {
         Returns: boolean
       }
       is_world_chat: { Args: { conversation_id: string }; Returns: boolean }
+      shares_conversation_with: {
+        Args: { _profile_id: string; _viewer_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
