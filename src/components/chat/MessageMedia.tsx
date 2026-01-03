@@ -23,13 +23,21 @@ const MessageMedia: React.FC<{ message: MessageMediaPayload }> = ({ message }) =
       const urls = JSON.parse(message.media_url) as string[];
       if (Array.isArray(urls) && urls.length > 0) {
         return (
-          <GalleryGrid
-            urls={urls}
-            onImageClick={(index) => {
-              setLightboxIndex(index);
-              setLightboxOpen(true);
-            }}
-          />
+          <>
+            <GalleryGrid
+              urls={urls}
+              onImageClick={(index) => {
+                setLightboxIndex(index);
+                setLightboxOpen(true);
+              }}
+            />
+            <ImageLightbox
+              images={urls}
+              initialIndex={lightboxIndex}
+              open={lightboxOpen}
+              onOpenChange={setLightboxOpen}
+            />
+          </>
         );
       }
     } catch {
