@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { FileText, Download } from "lucide-react";
 import GalleryGrid from "@/components/chat/GalleryGrid";
+import ImageLightbox from "@/components/chat/ImageLightbox";
 
 export interface MessageMediaPayload {
   media_url?: string | null;
@@ -12,13 +13,24 @@ const MEDIA_MAX_W_CLASS = "max-w-[300px]";
 const MEDIA_MAX_H_CLASS = "max-h-[400px]";
 
 const MessageMedia: React.FC<{ message: MessageMediaPayload }> = ({ message }) => {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
   if (!message.media_url) return null;
 
   if (message.media_type === "gallery") {
     try {
       const urls = JSON.parse(message.media_url) as string[];
       if (Array.isArray(urls) && urls.length > 0) {
-        return <GalleryGrid urls={urls} />;
+        return (
+          <GalleryGrid
+            urls={urls}
+            onImageClick={(index) => {
+              setLightboxIndex(index);
+              setLightboxOpen(true);
+            }}
+          />
+        );
       }
     } catch {
       // fall through
@@ -27,13 +39,21 @@ const MessageMedia: React.FC<{ message: MessageMediaPayload }> = ({ message }) =
 
   if (message.media_type === "image") {
     return (
-      <img
-        src={message.media_url}
-        alt="Shared image"
-        loading="lazy"
-        className={`${MEDIA_MAX_W_CLASS} ${MEDIA_MAX_H_CLASS} w-full rounded-lg mb-2 cursor-pointer object-cover`}
-        onClick={() => window.open(message.media_url!, "_blank")}
-      />
+      <>
+        <img
+          src={message.media_url}
+          alt="Shared image"
+          loading="lazy"
+          className={`${MEDIA_MAX_W_CLASS} ${MEDIA_MAX_H_CLASS} w-full rounded-lg mb-2 cursor-pointer object-cover hover:opacity-90 transition-opacity`}
+          onClick={() => setLightboxOpen(true)}
+        />
+        <ImageLightbox
+          images={[message.media_url]}
+          initialIndex={0}
+          open={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+        />
+      </>
     );
   }
 
