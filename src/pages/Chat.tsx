@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Loader2, Settings } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { WORLD_CHAT_ID } from '@/lib/constants';
@@ -13,6 +13,8 @@ import { renderMessageContent } from '@/lib/linkify';
 import { compressImage } from '@/lib/imageCompression';
 import { Progress } from '@/components/ui/progress';
 import MessageMedia from '@/components/chat/MessageMedia';
+import ThemePicker from '@/components/chat/ThemePicker';
+import { getThemeById } from '@/lib/chatThemes';
 
 interface Message {
   id: string;
@@ -59,10 +61,14 @@ const Chat = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFileInfo[]>([]);
+  const [conversationTheme, setConversationTheme] = useState('default');
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const [themeUpdating, setThemeUpdating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isWorldChat = id === WORLD_CHAT_ID;
+  const currentTheme = getThemeById(conversationTheme);
 
   const getMediaType = (file: File): string => {
     if (file.type.startsWith('image/')) return 'image';
@@ -242,12 +248,47 @@ const Chat = () => {
       .eq('is_read', false);
   };
 
+  // Fetch conversation theme
+  const fetchConversationTheme = async () => {
+    if (!id) return;
+    
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('theme')
+      .eq('id', id)
+      .single();
+    
+    if (!error && data?.theme) {
+      setConversationTheme(data.theme);
+    }
+  };
+
+  // Update theme for conversation
+  const handleThemeChange = async (themeId: string) => {
+    if (!id) return;
+    
+    setThemeUpdating(true);
+    const { error } = await supabase
+      .from('conversations')
+      .update({ theme: themeId })
+      .eq('id', id);
+    
+    if (error) {
+      toast.error('Failed to update theme');
+    } else {
+      setConversationTheme(themeId);
+      setThemePickerOpen(false);
+    }
+    setThemeUpdating(false);
+  };
+
   useEffect(() => {
     fetchMessages();
     fetchOtherUser();
+    fetchConversationTheme();
 
     // Subscribe to realtime messages
-    const channel = supabase
+    const messagesChannel = supabase
       .channel(`messages-${id}`)
       .on(
         'postgres_changes',
@@ -269,8 +310,29 @@ const Chat = () => {
       )
       .subscribe();
 
+    // Subscribe to conversation theme changes for real-time sync
+    const themeChannel = supabase
+      .channel(`conversation-theme-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          const updated = payload.new as { theme?: string };
+          if (updated.theme) {
+            setConversationTheme(updated.theme);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(themeChannel);
     };
   }, [id, user]);
 
@@ -411,7 +473,16 @@ const Chat = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className={`min-h-screen flex flex-col ${currentTheme.background}`}>
+      {/* Theme Picker Modal */}
+      <ThemePicker
+        open={themePickerOpen}
+        onOpenChange={setThemePickerOpen}
+        currentTheme={conversationTheme}
+        onSelectTheme={handleThemeChange}
+        isLoading={themeUpdating}
+      />
+
       {/* Header */}
       <header className={`sticky top-0 z-50 backdrop-blur-lg border-b border-border ${
         isWorldChat 
@@ -463,6 +534,16 @@ const Chat = () => {
               </p>
             </div>
           </div>
+
+          {/* Theme Settings Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setThemePickerOpen(true)}
+            className="rounded-full hover:bg-accent"
+          >
+            <Settings className="w-5 h-5" />
+          </Button>
         </div>
       </header>
 
@@ -509,8 +590,8 @@ const Chat = () => {
                     <div
                       className={`max-w-[80%] px-4 py-3 rounded-2xl ${
                         isMine
-                          ? 'bg-message-sent text-primary-foreground rounded-br-md'
-                          : 'bg-message-received text-foreground rounded-bl-md'
+                          ? `${currentTheme.sentBubble} ${currentTheme.sentText} rounded-br-md`
+                          : `${currentTheme.receivedBubble} ${currentTheme.receivedText} rounded-bl-md`
                       }`}
                     >
                       {/* Sender name for World Chat */}
@@ -527,7 +608,7 @@ const Chat = () => {
                           <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
                         ) : null;
                       })()}
-                      <p className={`text-xs mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      <p className={`text-xs mt-1 ${isMine ? 'opacity-70' : 'opacity-60'}`}>
                         {format(new Date(message.created_at), 'h:mm a')}
                       </p>
                     </div>

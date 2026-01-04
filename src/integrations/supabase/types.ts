@@ -56,6 +56,7 @@ export type Database = {
           id: string
           is_group: boolean | null
           name: string | null
+          theme: string
           updated_at: string | null
         }
         Insert: {
@@ -63,6 +64,7 @@ export type Database = {
           id?: string
           is_group?: boolean | null
           name?: string | null
+          theme?: string
           updated_at?: string | null
         }
         Update: {
@@ -70,6 +72,7 @@ export type Database = {
           id?: string
           is_group?: boolean | null
           name?: string | null
+          theme?: string
           updated_at?: string | null
         }
         Relationships: []
