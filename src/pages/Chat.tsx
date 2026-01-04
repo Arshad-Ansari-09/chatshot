@@ -9,22 +9,12 @@ import { ArrowLeft, Send, Globe, Paperclip, X, FileText, Loader2, Settings } fro
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { WORLD_CHAT_ID } from '@/lib/constants';
-import { renderMessageContent } from '@/lib/linkify';
 import { compressImage } from '@/lib/imageCompression';
 import { Progress } from '@/components/ui/progress';
-import MessageMedia from '@/components/chat/MessageMedia';
 import ThemePicker from '@/components/chat/ThemePicker';
 import { getThemeById } from '@/lib/chatThemes';
-
-interface Message {
-  id: string;
-  content: string;
-  sender_id: string;
-  created_at: string;
-  is_read: boolean;
-  media_url?: string | null;
-  media_type?: string | null;
-}
+import MessageBubble, { MessageData, Reaction } from '@/components/chat/MessageBubble';
+import ReplyPreview from '@/components/chat/ReplyPreview';
 
 interface OtherUser {
   id: string;
@@ -51,7 +41,8 @@ const Chat = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<MessageData[]>([]);
+  const [reactions, setReactions] = useState<Reaction[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
   const [participants, setParticipants] = useState<Record<string, Participant>>({});
@@ -64,6 +55,7 @@ const Chat = () => {
   const [conversationTheme, setConversationTheme] = useState('default');
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [themeUpdating, setThemeUpdating] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<MessageData | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -263,6 +255,20 @@ const Chat = () => {
     }
   };
 
+  // Fetch reactions for all messages
+  const fetchReactions = async () => {
+    if (!id) return;
+    
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .select('*')
+      .in('message_id', messages.map(m => m.id));
+    
+    if (!error && data) {
+      setReactions(data);
+    }
+  };
+
   // Update theme for conversation
   const handleThemeChange = async (themeId: string) => {
     if (!id) return;
@@ -282,6 +288,69 @@ const Chat = () => {
     setThemeUpdating(false);
   };
 
+  // Delete message (soft delete)
+  const handleDeleteMessage = async (messageId: string) => {
+    const { error } = await supabase
+      .from('messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .eq('sender_id', user?.id);
+    
+    if (error) {
+      toast.error('Failed to delete message');
+    } else {
+      setMessages(prev => prev.map(m => 
+        m.id === messageId ? { ...m, deleted_at: new Date().toISOString() } : m
+      ));
+    }
+  };
+
+  // Add reaction
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .insert({ message_id: messageId, user_id: user.id, emoji })
+      .select()
+      .single();
+    
+    if (error) {
+      if (error.code === '23505') {
+        // Already reacted with this emoji, ignore
+        return;
+      }
+      toast.error('Failed to add reaction');
+    } else if (data) {
+      setReactions(prev => [...prev, data]);
+    }
+  };
+
+  // Remove reaction
+  const handleRemoveReaction = async (messageId: string, emoji: string) => {
+    if (!user) return;
+    
+    const { error } = await supabase
+      .from('message_reactions')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('user_id', user.id)
+      .eq('emoji', emoji);
+    
+    if (error) {
+      toast.error('Failed to remove reaction');
+    } else {
+      setReactions(prev => prev.filter(r => 
+        !(r.message_id === messageId && r.user_id === user.id && r.emoji === emoji)
+      ));
+    }
+  };
+
+  // Set message to reply to
+  const handleReply = (message: MessageData) => {
+    setReplyingTo(message);
+  };
+
   useEffect(() => {
     fetchMessages();
     fetchOtherUser();
@@ -299,13 +368,26 @@ const Chat = () => {
           filter: `conversation_id=eq.${id}`,
         },
         async (payload) => {
-          const newMessage = payload.new as Message;
-          setMessages((prev) => [...prev, newMessage]);
+          const newMsg = payload.new as MessageData;
+          setMessages((prev) => [...prev, newMsg]);
           
           // If the new message is from someone else, mark it as read immediately
-          if (newMessage.sender_id !== user?.id) {
+          if (newMsg.sender_id !== user?.id) {
             await markMessagesAsRead();
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${id}`,
+        },
+        (payload) => {
+          const updatedMsg = payload.new as MessageData;
+          setMessages((prev) => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
         }
       )
       .subscribe();
@@ -330,11 +412,41 @@ const Chat = () => {
       )
       .subscribe();
 
+    // Subscribe to reactions changes
+    const reactionsChannel = supabase
+      .channel(`reactions-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_reactions',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newReaction = payload.new as Reaction;
+            setReactions((prev) => [...prev, newReaction]);
+          } else if (payload.eventType === 'DELETE') {
+            const oldReaction = payload.old as Reaction;
+            setReactions((prev) => prev.filter(r => r.id !== oldReaction.id));
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(themeChannel);
+      supabase.removeChannel(reactionsChannel);
     };
   }, [id, user]);
+
+  // Fetch reactions when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      fetchReactions();
+    }
+  }, [messages.length]);
 
   // Auto-scroll when new messages arrive
   const prevMessagesCount = useRef(messages.length);
@@ -352,7 +464,9 @@ const Chat = () => {
 
     setSending(true);
     const messageContent = newMessage.trim();
+    const currentReplyToId = replyingTo?.id || null;
     setNewMessage('');
+    setReplyingTo(null);
 
     // If there are files to upload
     if (selectedFiles.length > 0) {
@@ -405,6 +519,7 @@ const Chat = () => {
             content: usesCaptionForMedia ? messageContent : '📷 Photos',
             media_type: 'gallery',
             media_url: JSON.stringify(imageUrls),
+            reply_to_id: currentReplyToId,
           });
         } else if (imageUrls.length === 1) {
           await supabase.from('messages').insert({
@@ -413,6 +528,7 @@ const Chat = () => {
             content: usesCaptionForMedia ? messageContent : '📷 Photo',
             media_type: 'image',
             media_url: imageUrls[0],
+            reply_to_id: currentReplyToId,
           });
         }
 
@@ -430,6 +546,7 @@ const Chat = () => {
             content: shouldUseCaption ? messageContent : fallbackLabel,
             media_url: u.url,
             media_type: u.type,
+            reply_to_id: i === 0 ? currentReplyToId : null,
           });
         }
       } catch (err) {
@@ -446,6 +563,7 @@ const Chat = () => {
         conversation_id: id,
         sender_id: user.id,
         content: messageContent,
+        reply_to_id: currentReplyToId,
       });
 
       if (error) {
@@ -567,6 +685,10 @@ const Chat = () => {
                 format(new Date(messages[index - 1].created_at), 'yyyy-MM-dd');
               
               const sender = isWorldChat && !isMine ? participants[message.sender_id] : null;
+              const messageReactions = reactions.filter(r => r.message_id === message.id);
+              const replyToMessage = message.reply_to_id 
+                ? messages.find(m => m.id === message.reply_to_id) 
+                : null;
 
               return (
                 <React.Fragment key={message.id}>
@@ -577,42 +699,20 @@ const Chat = () => {
                       </span>
                     </div>
                   )}
-                  <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                    {/* Avatar for other users in World Chat */}
-                    {isWorldChat && !isMine && (
-                      <Avatar className="w-8 h-8 mr-2 flex-shrink-0 mt-1">
-                        <AvatarImage src={sender?.avatar_url || undefined} />
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          {sender?.full_name?.[0] || sender?.username?.[0] || '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
-                    <div
-                      className={`max-w-[80%] px-4 py-3 rounded-2xl ${
-                        isMine
-                          ? `${currentTheme.sentBubble} ${currentTheme.sentText} rounded-br-md`
-                          : `${currentTheme.receivedBubble} ${currentTheme.receivedText} rounded-bl-md`
-                      }`}
-                    >
-                      {/* Sender name for World Chat */}
-                      {isWorldChat && !isMine && sender && (
-                        <p className="text-xs font-semibold text-purple-400 mb-1">
-                          {sender.full_name || sender.username || 'Unknown'}
-                        </p>
-                      )}
-                      <MessageMedia message={message} />
-                      {(() => {
-                        const placeholders = new Set(['📷 Photo', '📷 Photos', '🎥 Video', '📎 File']);
-                        const shouldShowText = message.content?.trim().length > 0 && !placeholders.has(message.content);
-                        return shouldShowText ? (
-                          <p className="text-sm break-words">{renderMessageContent(message.content)}</p>
-                        ) : null;
-                      })()}
-                      <p className={`text-xs mt-1 ${isMine ? 'opacity-70' : 'opacity-60'}`}>
-                        {format(new Date(message.created_at), 'h:mm a')}
-                      </p>
-                    </div>
-                  </div>
+                  <MessageBubble
+                    message={message}
+                    isMine={isMine}
+                    isWorldChat={isWorldChat}
+                    sender={sender}
+                    currentTheme={currentTheme}
+                    reactions={messageReactions}
+                    replyToMessage={replyToMessage}
+                    currentUserId={user?.id || ''}
+                    onReply={handleReply}
+                    onDelete={handleDeleteMessage}
+                    onReact={handleAddReaction}
+                    onRemoveReaction={handleRemoveReaction}
+                  />
                 </React.Fragment>
               );
             })
@@ -623,6 +723,15 @@ const Chat = () => {
 
       {/* Message Input */}
       <div className="sticky bottom-0 bg-card/80 backdrop-blur-lg border-t border-border p-4">
+        {/* Reply Preview */}
+        {replyingTo && (
+          <ReplyPreview
+            replyToMessage={replyingTo}
+            currentUserId={user?.id || ''}
+            onClear={() => setReplyingTo(null)}
+          />
+        )}
+
         {/* Upload Progress */}
         {uploading && (
           <div className="max-w-2xl mx-auto mb-3">
