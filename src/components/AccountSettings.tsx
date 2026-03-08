@@ -228,7 +228,7 @@ const AccountSettings = () => {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif,.webp,.svg,.bmp,.tiff,.ico"
                   className="hidden"
                   onChange={handleAvatarUpload}
                 />
