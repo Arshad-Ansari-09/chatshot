@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Settings, Camera, Loader2, Clock } from 'lucide-react';
+import { Settings, Camera, Loader2, Clock, Trash2 } from 'lucide-react';
 
 interface Profile {
   id: string;
@@ -144,6 +144,29 @@ const AccountSettings = () => {
     }
   };
 
+  const handleAvatarDelete = async () => {
+    if (!user || !profile?.avatar_url) return;
+    
+    setIsUploading(true);
+    try {
+      const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: defaultAvatar })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setProfile(prev => prev ? { ...prev, avatar_url: defaultAvatar } : null);
+      toast.success('Profile picture removed!');
+    } catch (error: any) {
+      console.error('Delete avatar error:', error);
+      toast.error('Failed to remove profile picture');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleNameChange = async () => {
     if (!user || !newName.trim()) {
       toast.error('Name cannot be empty');
@@ -233,9 +256,23 @@ const AccountSettings = () => {
                   onChange={handleAvatarUpload}
                 />
               </div>
-              <p className="text-sm text-muted-foreground">
-                Click the camera icon to update your photo
-              </p>
+              <div className="flex gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Click the camera icon to update your photo
+                </p>
+                {profile?.avatar_url && !profile.avatar_url.includes('dicebear.com') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAvatarDelete}
+                    disabled={isUploading}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10 text-xs"
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Remove
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Name Change Section */}
