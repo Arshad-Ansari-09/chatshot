@@ -537,8 +537,13 @@ const Chat = () => {
           const u = otherUploads[i];
           const shouldUseCaption = messageContent.length > 0 && imageUrls.length === 0 && i === 0;
 
+          const originalFile = selectedFiles.find(f => {
+            const mt = getMediaType(f.file);
+            return mt === u.type;
+          });
+          const originalName = originalFile?.file.name || 'File';
           const fallbackLabel =
-            u.type === 'video' ? '🎥 Video' : u.type === 'document' ? '📎 File' : '📎 File';
+            u.type === 'video' ? '🎥 Video' : `📎 ${originalName}`;
 
           await supabase.from('messages').insert({
             conversation_id: id,
@@ -798,7 +803,7 @@ const Chat = () => {
             type="file"
             ref={fileInputRef}
             onChange={handleFileSelect}
-            accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+            accept="*/*"
             multiple
             className="hidden"
           />
