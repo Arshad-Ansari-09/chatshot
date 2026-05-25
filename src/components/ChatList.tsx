@@ -257,14 +257,14 @@ const ChatList = () => {
         const isWorldChat = convo.id === WORLD_CHAT_ID;
         
         return (
-          <button
+          <div
             key={convo.id}
-            onClick={() => navigate(`/chat/${convo.id}`)}
-            className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-colors shadow-card animate-fade-in ${
-              isWorldChat 
-                ? 'bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 border border-purple-500/30' 
+            className={`relative w-full flex items-center gap-3 p-4 rounded-2xl transition-colors shadow-card animate-fade-in cursor-pointer ${
+              isWorldChat
+                ? 'bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 border border-purple-500/30'
                 : 'bg-card hover:bg-accent'
             }`}
+            onClick={() => navigate(`/chat/${convo.id}`)}
           >
             <div className="relative">
               {isWorldChat ? (
@@ -285,7 +285,7 @@ const ChatList = () => {
                 </>
               )}
             </div>
-            
+
             <div className="flex-1 min-w-0 text-left">
               <div className="flex items-center justify-between gap-2">
                 <p className={`font-semibold truncate ${isWorldChat ? 'text-purple-400' : 'text-foreground'}`}>
@@ -302,16 +302,16 @@ const ChatList = () => {
                   {isWorldChat && convo.participantCount && (
                     <span className="text-purple-400/80">{convo.participantCount} members • </span>
                   )}
-                  {convo.lastMessage 
-                    ? `${convo.lastMessage.sender_id === user?.id 
-                        ? 'You' 
+                  {convo.lastMessage
+                    ? `${convo.lastMessage.sender_id === user?.id
+                        ? 'You'
                         : (convo.lastMessage.senderName || convo.otherUser?.full_name || '')}: ${convo.lastMessage.content}`
                     : 'No messages yet'}
                 </p>
                 {convo.unreadCount > 0 && (
                   <span className={`flex-shrink-0 min-w-5 h-5 px-1.5 flex items-center justify-center text-xs font-medium rounded-full ${
-                    isWorldChat 
-                      ? 'bg-purple-500 text-white' 
+                    isWorldChat
+                      ? 'bg-purple-500 text-white'
                       : 'text-primary-foreground bg-primary'
                   }`}>
                     {convo.unreadCount}
@@ -319,9 +319,59 @@ const ChatList = () => {
                 )}
               </div>
             </div>
-          </button>
+
+            {!isWorldChat && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="p-2 rounded-full hover:bg-background/50 text-muted-foreground"
+                    aria-label="Chat options"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(convo);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete chat
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         );
       })}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the conversation with{' '}
+              <span className="font-semibold">
+                {deleteTarget?.otherUser?.full_name || deleteTarget?.otherUser?.username || 'this user'}
+              </span>{' '}
+              from your chat list. You can always start a new chat with them later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteChat}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
