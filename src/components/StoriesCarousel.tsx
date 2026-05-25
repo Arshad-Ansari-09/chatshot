@@ -94,7 +94,7 @@ const StoriesCarousel = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressStartTimeRef = useRef<number>(0);
   const elapsedBeforePauseRef = useRef<number>(0);
 
