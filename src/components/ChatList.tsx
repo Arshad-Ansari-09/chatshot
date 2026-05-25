@@ -51,9 +51,26 @@ const ChatList = () => {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<ConversationWithDetails | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const fetchConversations = async () => {
-    if (!user) return;
+  const handleDeleteChat = async () => {
+    if (!user || !deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from('conversation_participants')
+      .delete()
+      .eq('conversation_id', deleteTarget.id)
+      .eq('user_id', user.id);
+    setDeleting(false);
+    if (error) {
+      toast.error('Failed to delete chat');
+    } else {
+      toast.success('Chat deleted');
+      setConversations(prev => prev.filter(c => c.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    }
+  };
 
     // Get user's conversations
     const { data: participations, error: partError } = await supabase
