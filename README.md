@@ -1,73 +1,85 @@
-# Welcome to your Lovable project
+💬 Real-Time Chat Application
 
-## Project info
+A modern full-stack real-time messaging platform inspired by WhatsApp and Instagram, featuring live chat, stories, media sharing, unread indicators, and presence tracking using Supabase Realtime.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+🌐 Live Demo
 
-## How can I edit this code?
+Live Site: [Add Your Live Link Here]
 
-There are several ways of editing your application.
+GitHub Repository: [Add GitHub Repo Link Here]
 
-**Use Lovable**
+📌 Features
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+💬 Private 1:1 Real-Time Messaging
 
-Changes made via Lovable will be committed automatically to this repo.
+🌍 Global World Chat Room
 
-**Use your preferred IDE**
+📸 Stories System with Auto-Advance
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+🖼️ Media Upload & Compression
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+🟢 Live Online/Offline Presence Tracking
 
-Follow these steps:
+🔔 Unread Message Badges
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+📱 Responsive Modern UI
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+⚡ Instant Real-Time Synchronization
 
-# Step 3: Install the necessary dependencies.
-npm i
+🧑‍🤝‍🧑 User Profiles & Name Cooldown System
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+🛠️ Tech Stack
 
-**Edit a file directly in GitHub**
+Frontend
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+React
 
-**Use GitHub Codespaces**
+TypeScript
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Tailwind CSS
 
-## What technologies are used for this project?
+Backend & Realtime
 
-This project is built with:
+Supabase Realtime
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+PostgreSQL
 
-## How can I deploy this project?
+Additional Tools
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Image Compression APIs
 
-## Can I connect a custom domain to my Lovable project?
+Git & GitHub🧠 Key Functionalities
 
-Yes, you can!
+🔄 Real-Time Messaging
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Uses Supabase Realtime channels for instant bi-directional communication.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+📸 Stories Engine
+
+Auto story progression
+
+Media preloading
+
+Smooth viewing experience
+
+🖼️ Media Sharing
+
+Multiple file uploads
+
+Client-side image compression
+
+Gallery grid layout
+
+🟢 Presence System
+
+Tracks live user status with online/offline indicators.
+
+📈 Performance & UX Optimizations
+
+Optimized media rendering
+
+Smooth auto-scroll handling
+
+Fast realtime synchronization
+
+Lightweight frontend architecture
