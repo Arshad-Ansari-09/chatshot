@@ -72,6 +72,9 @@ const ChatList = () => {
     }
   };
 
+  const fetchConversations = async () => {
+    if (!user) return;
+
     // Get user's conversations
     const { data: participations, error: partError } = await supabase
       .from('conversation_participants')
