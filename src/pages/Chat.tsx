@@ -609,7 +609,7 @@ const Chat = () => {
       {/* Header */}
       <header className={`sticky top-0 z-50 backdrop-blur-lg border-b border-border ${
         isWorldChat 
-          ? 'bg-gradient-to-r from-purple-500/10 to-blue-500/10' 
+          ? 'bg-gradient-to-r from-primary/10 to-primary/5' 
           : 'bg-card/80'
       }`}>
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-4">
@@ -625,7 +625,7 @@ const Chat = () => {
           <div className="flex items-center gap-3 flex-1">
             <div className="relative">
               {isWorldChat ? (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
                   <Globe className="w-5 h-5 text-white" />
                 </div>
               ) : (
@@ -643,7 +643,7 @@ const Chat = () => {
               )}
             </div>
             <div>
-              <p className={`font-semibold ${isWorldChat ? 'text-purple-400' : 'text-foreground'}`}>
+              <p className={`font-semibold ${isWorldChat ? 'text-primary' : 'text-foreground'}`}>
                 {isWorldChat ? 'World Chat' : (otherUser?.full_name || otherUser?.username || 'Unknown')}
               </p>
               <p className="text-xs text-muted-foreground">
