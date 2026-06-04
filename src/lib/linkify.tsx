@@ -15,7 +15,7 @@ export const renderMessageContent = (content: string): React.ReactNode => {
           href={part}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-blue-400 underline hover:text-blue-300 break-all"
+          className="text-primary underline hover:text-primary/70 break-all"
         >
           {part}
         </a>

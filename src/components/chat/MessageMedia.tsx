@@ -14,12 +14,12 @@ const MEDIA_MAX_H_CLASS = "max-h-[400px]";
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  if (['pdf'].includes(ext)) return <FileText className="w-8 h-8 text-red-400" />;
-  if (['doc', 'docx', 'txt', 'rtf', 'odt'].includes(ext)) return <FileText className="w-8 h-8 text-blue-400" />;
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return <FileSpreadsheet className="w-8 h-8 text-green-400" />;
-  if (['ppt', 'pptx'].includes(ext)) return <FileText className="w-8 h-8 text-orange-400" />;
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <File className="w-8 h-8 text-yellow-400" />;
-  if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) return <File className="w-8 h-8 text-purple-400" />;
+  if (['pdf'].includes(ext)) return <FileText className="w-8 h-8 text-muted-foreground" />;
+  if (['doc', 'docx', 'txt', 'rtf', 'odt'].includes(ext)) return <FileText className="w-8 h-8 text-muted-foreground" />;
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return <FileSpreadsheet className="w-8 h-8 text-muted-foreground" />;
+  if (['ppt', 'pptx'].includes(ext)) return <FileText className="w-8 h-8 text-muted-foreground" />;
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <File className="w-8 h-8 text-muted-foreground" />;
+  if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) return <File className="w-8 h-8 text-muted-foreground" />;
   return <File className="w-8 h-8 text-muted-foreground" />;
 };
 

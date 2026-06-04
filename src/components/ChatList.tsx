@@ -261,14 +261,14 @@ const ChatList = () => {
             key={convo.id}
             className={`relative w-full flex items-center gap-3 p-4 rounded-2xl transition-colors shadow-card animate-fade-in cursor-pointer ${
               isWorldChat
-                ? 'bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 border border-purple-500/30'
+                ? 'bg-gradient-to-r from-primary/15 to-primary/5 hover:from-primary/20 hover:to-primary/10 border border-primary/20'
                 : 'bg-card hover:bg-accent'
             }`}
             onClick={() => navigate(`/chat/${convo.id}`)}
           >
             <div className="relative">
               {isWorldChat ? (
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
                   <Globe className="w-7 h-7 text-white" />
                 </div>
               ) : (
@@ -288,7 +288,7 @@ const ChatList = () => {
 
             <div className="flex-1 min-w-0 text-left">
               <div className="flex items-center justify-between gap-2">
-                <p className={`font-semibold truncate ${isWorldChat ? 'text-purple-400' : 'text-foreground'}`}>
+                <p className={`font-semibold truncate ${isWorldChat ? 'text-primary' : 'text-foreground'}`}>
                   {isWorldChat ? 'World Chat' : (convo.otherUser?.full_name || convo.otherUser?.username || 'Unknown')}
                 </p>
                 {convo.lastMessage && (
@@ -300,7 +300,7 @@ const ChatList = () => {
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm text-muted-foreground truncate">
                   {isWorldChat && convo.participantCount && (
-                    <span className="text-purple-400/80">{convo.participantCount} members • </span>
+                    <span className="text-primary/80">{convo.participantCount} members • </span>
                   )}
                   {convo.lastMessage
                     ? `${convo.lastMessage.sender_id === user?.id
@@ -311,7 +311,7 @@ const ChatList = () => {
                 {convo.unreadCount > 0 && (
                   <span className={`flex-shrink-0 min-w-5 h-5 px-1.5 flex items-center justify-center text-xs font-medium rounded-full ${
                     isWorldChat
-                      ? 'bg-purple-500 text-white'
+                      ? 'bg-primary text-primary-foreground'
                       : 'text-primary-foreground bg-primary'
                   }`}>
                     {convo.unreadCount}

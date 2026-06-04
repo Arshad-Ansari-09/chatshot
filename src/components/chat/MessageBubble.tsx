@@ -105,7 +105,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         >
           {/* Sender name for World Chat */}
           {isWorldChat && !isMine && sender && !isDeleted && (
-            <p className="text-xs font-semibold text-purple-400 mb-1">
+            <p className="text-xs font-semibold text-primary mb-1">
               {sender.full_name || sender.username || 'Unknown'}
             </p>
           )}
