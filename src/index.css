@@ -6,51 +6,51 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    --background: 30 15% 97%;
+    --foreground: 30 8% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 30 8% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 30 8% 15%;
 
-    --primary: 199 89% 48%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 25 15% 30%;
+    --primary-foreground: 30 15% 97%;
 
-    --secondary: 199 30% 94%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 30 12% 92%;
+    --secondary-foreground: 30 8% 20%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 30 12% 94%;
+    --muted-foreground: 30 6% 45%;
 
-    --accent: 199 50% 90%;
-    --accent-foreground: 199 89% 30%;
+    --accent: 30 14% 90%;
+    --accent-foreground: 25 15% 25%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 199 89% 48%;
+    --border: 30 10% 87%;
+    --input: 30 10% 87%;
+    --ring: 25 15% 40%;
 
     --radius: 1rem;
 
     /* Custom colors */
-    --story-unread: 142 76% 36%;
-    --story-viewed: 215 16% 70%;
-    --online: 142 76% 36%;
-    --message-sent: 199 89% 48%;
-    --message-received: 210 40% 96%;
+    --story-unread: 25 35% 45%;
+    --story-viewed: 30 8% 70%;
+    --online: 140 25% 40%;
+    --message-sent: 25 15% 30%;
+    --message-received: 30 12% 92%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(199 89% 38%) 100%);
-    --gradient-story: linear-gradient(45deg, hsl(142 76% 36%) 0%, hsl(160 84% 39%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(25 15% 35%) 0%, hsl(25 15% 25%) 100%);
+    --gradient-story: linear-gradient(45deg, hsl(25 35% 48%) 0%, hsl(30 25% 42%) 100%);
     
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(222 47% 11% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(222 47% 11% / 0.1), 0 2px 4px -2px hsl(222 47% 11% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(222 47% 11% / 0.1), 0 4px 6px -4px hsl(222 47% 11% / 0.1);
+    --shadow-sm: 0 1px 2px 0 hsl(30 8% 15% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(30 8% 15% / 0.08), 0 2px 4px -2px hsl(30 8% 15% / 0.08);
+    --shadow-lg: 0 10px 15px -3px hsl(30 8% 15% / 0.1), 0 4px 6px -4px hsl(30 8% 15% / 0.08);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
