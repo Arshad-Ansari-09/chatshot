@@ -166,13 +166,8 @@ const Chat = () => {
     // Scroll to bottom instantly after loading messages
     setTimeout(() => scrollToBottom(true), 50);
 
-    // Mark messages as read
-    await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('conversation_id', id)
-      .neq('sender_id', user.id)
-      .eq('is_read', false);
+    // Mark messages as read (via SECURITY DEFINER RPC)
+    await supabase.rpc('mark_messages_read', { _conversation_id: id });
   };
 
   const fetchOtherUser = async () => {
@@ -231,13 +226,7 @@ const Chat = () => {
   // Mark messages as read function
   const markMessagesAsRead = async () => {
     if (!id || !user) return;
-    
-    await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('conversation_id', id)
-      .neq('sender_id', user.id)
-      .eq('is_read', false);
+    await supabase.rpc('mark_messages_read', { _conversation_id: id });
   };
 
   // Fetch conversation theme
@@ -462,8 +451,13 @@ const Chat = () => {
     e.preventDefault();
     if ((!newMessage.trim() && selectedFiles.length === 0) || !user || !id || sending || uploading) return;
 
-    setSending(true);
     const messageContent = newMessage.trim();
+    if (messageContent.length > 10000) {
+      toast.error('Message too long (max 10,000 characters)');
+      return;
+    }
+
+    setSending(true);
     const currentReplyToId = replyingTo?.id || null;
     setNewMessage('');
     setReplyingTo(null);
