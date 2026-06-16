@@ -539,6 +539,12 @@ const StoriesCarousel = () => {
       return;
     }
 
+    const trimmedCaption = newStoryCaption.trim();
+    if (trimmedCaption.length > 500) {
+      toast.error('Caption too long (max 500 characters)');
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -560,7 +566,7 @@ const StoriesCarousel = () => {
         user_id: user.id,
         media_url: publicUrl,
         media_type: mediaType,
-        caption: newStoryCaption.trim() || null,
+        caption: trimmedCaption || null,
         visibility: newStoryVisibility,
       });
 
