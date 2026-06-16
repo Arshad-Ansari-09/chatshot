@@ -297,6 +297,10 @@ export type Database = {
         Returns: boolean
       }
       is_world_chat: { Args: { conversation_id: string }; Returns: boolean }
+      mark_messages_read: {
+        Args: { _conversation_id: string }
+        Returns: undefined
+      }
       search_users: {
         Args: { search_query: string }
         Returns: {
