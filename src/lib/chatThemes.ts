@@ -15,7 +15,7 @@ export const chatThemes: ChatTheme[] = [
     name: 'Default',
     background: 'bg-background',
     sentBubble: 'bg-message-sent',
-    sentText: 'text-primary-foreground',
+    sentText: 'text-white',
     receivedBubble: 'bg-message-received',
     receivedText: 'text-foreground',
     preview: 'bg-gradient-to-br from-primary to-primary/80',
