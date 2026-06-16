@@ -96,7 +96,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         <div
           className={cn(
-            'max-w-[50%] w-fit px-4 py-3 rounded-2xl relative',
+            'max-w-[85%] w-fit px-4 py-3 rounded-2xl relative',
             isMine
               ? `${currentTheme.sentBubble} ${currentTheme.sentText} rounded-br-md`
               : `${currentTheme.receivedBubble} ${currentTheme.receivedText} rounded-bl-md`,
