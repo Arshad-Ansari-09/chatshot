@@ -164,6 +164,10 @@
   .animate-pulse-ring {
     animation: pulseRing 2s ease-in-out infinite;
   }
+
+  #lovable-badge {
+    display: none !important;
+  }
 }
 
 @keyframes fadeIn {
