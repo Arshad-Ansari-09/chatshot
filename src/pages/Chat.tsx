@@ -57,7 +57,12 @@ const Chat = () => {
   const [themeUpdating, setThemeUpdating] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageData | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE_SIZE = 50;
+
 
   const isWorldChat = id === WORLD_CHAT_ID;
   const currentTheme = getThemeById(conversationTheme);
