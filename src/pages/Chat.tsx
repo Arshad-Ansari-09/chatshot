@@ -155,24 +155,76 @@ const Chat = () => {
   const fetchMessages = async () => {
     if (!id || !user) return;
 
+    // Fetch only the most recent PAGE_SIZE messages for fast initial load
     const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('conversation_id', id)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false })
+      .limit(PAGE_SIZE);
 
     if (error) {
       console.error('Error fetching messages:', error);
       return;
     }
 
-    setMessages(data || []);
+    const ordered = (data || []).slice().reverse();
+    setMessages(ordered);
+    setHasMore((data || []).length === PAGE_SIZE);
 
     // Scroll to bottom instantly after loading messages
     setTimeout(() => scrollToBottom(true), 50);
 
     // Mark messages as read (via SECURITY DEFINER RPC)
     await supabase.rpc('mark_messages_read', { _conversation_id: id });
+  };
+
+  const loadOlderMessages = async () => {
+    if (!id || !user || loadingMore || !hasMore || messages.length === 0) return;
+    const container = messagesContainerRef.current;
+    const previousScrollHeight = container?.scrollHeight ?? 0;
+    const previousScrollTop = container?.scrollTop ?? 0;
+
+    setLoadingMore(true);
+    const oldest = messages[0].created_at;
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', id)
+      .lt('created_at', oldest)
+      .order('created_at', { ascending: false })
+      .limit(PAGE_SIZE);
+
+    if (error) {
+      console.error('Error loading older messages:', error);
+      setLoadingMore(false);
+      return;
+    }
+
+    const older = (data || []).slice().reverse();
+    if (older.length > 0) {
+      setMessages((prev) => {
+        const existing = new Set(prev.map((m) => m.id));
+        const deduped = older.filter((m) => !existing.has(m.id));
+        return [...deduped, ...prev];
+      });
+    }
+    setHasMore((data || []).length === PAGE_SIZE);
+
+    // Restore scroll position so the view doesn't jump
+    requestAnimationFrame(() => {
+      if (container) {
+        const newScrollHeight = container.scrollHeight;
+        container.scrollTop = previousScrollTop + (newScrollHeight - previousScrollHeight);
+      }
+      setLoadingMore(false);
+    });
+  };
+
+  const handleMessagesScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (e.currentTarget.scrollTop < 80 && hasMore && !loadingMore) {
+      loadOlderMessages();
+    }
   };
 
   const fetchOtherUser = async () => {
