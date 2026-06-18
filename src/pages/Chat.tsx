@@ -341,13 +341,14 @@ const Chat = () => {
   };
 
   useEffect(() => {
+    if (!id || !user) return;
     fetchMessages();
     fetchOtherUser();
     fetchConversationTheme();
 
     // Subscribe to realtime messages
     const messagesChannel = supabase
-      .channel(`messages-${id}`)
+      .channel(`messages-${id}-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -358,8 +359,11 @@ const Chat = () => {
         },
         async (payload) => {
           const newMsg = payload.new as MessageData;
-          setMessages((prev) => [...prev, newMsg]);
-          
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+
           // If the new message is from someone else, mark it as read immediately
           if (newMsg.sender_id !== user?.id) {
             await markMessagesAsRead();
@@ -379,11 +383,13 @@ const Chat = () => {
           setMessages((prev) => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[Realtime] messages-${id} status:`, status);
+      });
 
     // Subscribe to conversation theme changes for real-time sync
     const themeChannel = supabase
-      .channel(`conversation-theme-${id}`)
+      .channel(`conversation-theme-${id}-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -403,7 +409,7 @@ const Chat = () => {
 
     // Subscribe to reactions changes
     const reactionsChannel = supabase
-      .channel(`reactions-${id}`)
+      .channel(`reactions-${id}-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -414,7 +420,10 @@ const Chat = () => {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newReaction = payload.new as Reaction;
-            setReactions((prev) => [...prev, newReaction]);
+            setReactions((prev) => {
+              if (prev.some((r) => r.id === newReaction.id)) return prev;
+              return [...prev, newReaction];
+            });
           } else if (payload.eventType === 'DELETE') {
             const oldReaction = payload.old as Reaction;
             setReactions((prev) => prev.filter(r => r.id !== oldReaction.id));
@@ -428,7 +437,8 @@ const Chat = () => {
       supabase.removeChannel(themeChannel);
       supabase.removeChannel(reactionsChannel);
     };
-  }, [id, user]);
+  }, [id, user?.id]);
+
 
   // Fetch reactions when messages change
   useEffect(() => {
@@ -557,19 +567,29 @@ const Chat = () => {
       setUploading(false);
       setUploadProgress(0);
     } else if (messageContent) {
-      // Text-only message
-      const { error } = await supabase.from('messages').insert({
-        conversation_id: id,
-        sender_id: user.id,
-        content: messageContent,
-        reply_to_id: currentReplyToId,
-      });
+      // Text-only message — insert and append returned row optimistically
+      const { data: inserted, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: id,
+          sender_id: user.id,
+          content: messageContent,
+          reply_to_id: currentReplyToId,
+        })
+        .select()
+        .single();
 
       if (error) {
         toast.error('Failed to send message');
         setNewMessage(messageContent);
+      } else if (inserted) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === inserted.id)) return prev;
+          return [...prev, inserted as MessageData];
+        });
       }
     }
+
 
     // Update conversation timestamp
     await supabase
