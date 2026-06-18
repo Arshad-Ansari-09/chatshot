@@ -84,7 +84,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </Avatar>
       )}
       
-      <div className="relative">
+      <div className="relative max-w-[75%]">
         {/* Message Actions (on hover/touch) */}
         <MessageActions
           show={showActions && !isDeleted}
@@ -96,7 +96,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         <div
           className={cn(
-            'max-w-[85%] w-fit px-4 py-3 rounded-2xl relative',
+            'w-fit px-4 py-3 rounded-2xl relative',
             isMine
               ? `${currentTheme.sentBubble} ${currentTheme.sentText} rounded-br-md`
               : `${currentTheme.receivedBubble} ${currentTheme.receivedText} rounded-bl-md`,
