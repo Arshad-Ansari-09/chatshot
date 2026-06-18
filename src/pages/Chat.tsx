@@ -567,19 +567,29 @@ const Chat = () => {
       setUploading(false);
       setUploadProgress(0);
     } else if (messageContent) {
-      // Text-only message
-      const { error } = await supabase.from('messages').insert({
-        conversation_id: id,
-        sender_id: user.id,
-        content: messageContent,
-        reply_to_id: currentReplyToId,
-      });
+      // Text-only message — insert and append returned row optimistically
+      const { data: inserted, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: id,
+          sender_id: user.id,
+          content: messageContent,
+          reply_to_id: currentReplyToId,
+        })
+        .select()
+        .single();
 
       if (error) {
         toast.error('Failed to send message');
         setNewMessage(messageContent);
+      } else if (inserted) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === inserted.id)) return prev;
+          return [...prev, inserted as MessageData];
+        });
       }
     }
+
 
     // Update conversation timestamp
     await supabase
