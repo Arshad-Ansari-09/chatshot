@@ -742,8 +742,17 @@ const Chat = () => {
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
         <div className="max-w-2xl mx-auto space-y-4">
+          {loadingMore && (
+            <div className="flex justify-center py-2">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
           {messages.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No messages yet</p>
