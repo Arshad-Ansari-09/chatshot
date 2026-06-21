@@ -71,7 +71,7 @@ const Auth = () => {
         toast.error(error.message);
       }
     } else {
-      toast.success('Account created! Welcome to ChatWave!');
+      toast.success('Account created! Welcome to ChatShot!');
       navigate('/');
     }
     setIsSubmitting(false);
@@ -92,7 +92,7 @@ const Auth = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-primary mb-4">
             <MessageCircle className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">ChatWave</h1>
+          <h1 className="text-3xl font-bold text-foreground">ChatShot</h1>
           <p className="text-muted-foreground mt-2">Connect with friends instantly</p>
         </div>
 
@@ -152,7 +152,7 @@ const Auth = () => {
             <TabsContent value="signup">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl">Create account</CardTitle>
-                <CardDescription>Join ChatWave and start chatting</CardDescription>
+                <CardDescription>Join ChatShot and start chatting</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSignup} className="space-y-4">
