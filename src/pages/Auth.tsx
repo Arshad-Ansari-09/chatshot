@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, Mail, Lock, User, AtSign } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const Auth = () => {
@@ -52,8 +51,17 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signupEmail || !signupPassword || !signupFullName || !signupUsername) {
+    const email = signupEmail.trim().toLowerCase();
+    const fullName = signupFullName.trim();
+    const username = signupUsername.trim().toLowerCase();
+
+    if (!email || !signupPassword || !fullName || !username) {
       toast.error('Please fill in all fields');
+      return;
+    }
+
+    if (!/^[a-z0-9_]{3,24}$/.test(username)) {
+      toast.error('Username must be 3-24 characters and use only letters, numbers, or underscores.');
       return;
     }
 
@@ -64,12 +72,16 @@ const Auth = () => {
     
     setIsSubmitting(true);
 
-    const { error } = await signUp(signupEmail, signupPassword, signupFullName, signupUsername);
+    const { error } = await signUp(email, signupPassword, fullName, username);
 
     if (error) {
-      if (error.message.includes('already registered')) {
+      const message = error.message.toLowerCase();
+
+      if (message.includes('already registered') || message.includes('already been registered')) {
         toast.error('This email is already registered. Please sign in instead.');
-      } else if (error.message.toLowerCase().includes('database error')) {
+      } else if (message.includes('weak') || message.includes('pwned')) {
+        toast.error('Please choose a stronger password that has not been used elsewhere.');
+      } else if (message.includes('database error') || message.includes('duplicate key')) {
         toast.error('That username is already taken. Please choose another.');
       } else {
         toast.error(error.message);
