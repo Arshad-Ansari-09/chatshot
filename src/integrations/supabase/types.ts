@@ -296,6 +296,7 @@ export type Database = {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
       }
+      is_username_available: { Args: { _username: string }; Returns: boolean }
       is_world_chat: { Args: { conversation_id: string }; Returns: boolean }
       mark_messages_read: {
         Args: { _conversation_id: string }

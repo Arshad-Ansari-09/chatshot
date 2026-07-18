@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageCircle, Mail, Lock, User, AtSign } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const Auth = () => {
@@ -62,11 +63,29 @@ const Auth = () => {
     }
     
     setIsSubmitting(true);
+
+    // Check username availability first to avoid a DB-level failure inside the signup trigger
+    const { data: available, error: checkError } = await supabase.rpc('is_username_available', {
+      _username: signupUsername,
+    });
+    if (checkError) {
+      toast.error('Could not verify username. Please try again.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (!available) {
+      toast.error('That username is already taken. Please choose another.');
+      setIsSubmitting(false);
+      return;
+    }
+
     const { error } = await signUp(signupEmail, signupPassword, signupFullName, signupUsername);
-    
+
     if (error) {
       if (error.message.includes('already registered')) {
         toast.error('This email is already registered. Please sign in instead.');
+      } else if (error.message.toLowerCase().includes('database error')) {
+        toast.error('That username is already taken. Please choose another.');
       } else {
         toast.error(error.message);
       }
